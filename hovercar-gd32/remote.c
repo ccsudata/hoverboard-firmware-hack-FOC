@@ -277,7 +277,6 @@ static void init_uart_input(void) {
     // 期望接收 ASCII 帧: ch0,ch1,ch2,ch3,ch4,ch5,ch6,ch7\n
     // 例如: 1000,0,-1000,0,1000,0,0,0\n
     printf("UART输入初始化\n");
-    USART_Init(REMOTE_UART_BAUDRATE);
     remote_connected = RESET;
     uart_rx_index = 0;
 }

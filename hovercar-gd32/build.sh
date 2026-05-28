@@ -28,7 +28,7 @@ CFLAGS=(
   -Wno-unused-variable
   -ffunction-sections
   -fdata-sections
-  -DGD32F10X_MD
+  -DGD32F10X_HD
   -DUSE_STDPERIPH_DRIVER
   -D__SYSTEM_CLOCK_72M_PLL_IRC8M
 )
@@ -81,7 +81,7 @@ CMSIS_FILES=(
   "$ROOT_DIR/system_gd32f10x.c"
 )
 
-STARTUP_FILE="$ROOT_DIR/startup_gd32f10x_md.S"
+STARTUP_FILE="$GD32_DIR/Firmware/CMSIS/GD/GD32F10x/Source/GCC/startup_gd32f10x_hd.S"
 
 # 编译工程源文件
 for src in "${SRC_FILES[@]}"; do

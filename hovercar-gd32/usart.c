@@ -40,7 +40,7 @@ void USART_Init(uint32_t baudrate) {
     
     // 配置USART引脚 (PB10-TX, PB11-RX)
     gpio_init(DEBUG_USART_TX_PORT, GPIO_MODE_AF_PP, GPIO_OSPEED_50MHZ, DEBUG_USART_TX_PIN);
-    gpio_init(DEBUG_USART_RX_PORT, GPIO_MODE_IN_FLOATING, GPIO_OSPEED_50MHZ, DEBUG_USART_RX_PIN);
+    gpio_init(DEBUG_USART_RX_PORT, GPIO_MODE_IPU, GPIO_OSPEED_50MHZ, DEBUG_USART_RX_PIN);
     
     // 配置USART
     usart_deinit(DEBUG_USART);
@@ -249,9 +249,9 @@ static void process_command(const char* command) {
 // ============================================
 
 /**
- * @brief USART2/UART3 中断处理
+ * @brief UART3 中断处理
  */
-void USART2_IRQHandler(void) {
+void UART3_IRQHandler(void) {
     if (usart_interrupt_flag_get(DEBUG_USART, USART_INT_FLAG_RBNE) != RESET) {
         uint8_t ch = usart_data_receive(DEBUG_USART);
         process_received_char(ch);
