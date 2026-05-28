@@ -119,7 +119,7 @@ static void system_init(void) {
     BatteryVoltageCheck_Disable();
     
     // 10. 串口初始化 (调试用)
-    // USART_Init(115200);  // 取消注释以启用串口调试
+    USART_Init(115200);
     
     printf("================================\n");
     printf("hovercar-gd32 双电机控制器\n");

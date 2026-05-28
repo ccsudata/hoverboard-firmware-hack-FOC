@@ -57,6 +57,10 @@ void USART_Init(uint32_t baudrate) {
     // 使能USART
     usart_enable(DEBUG_USART);
     
+    // 使能接收中断
+    nvic_irq_enable(DEBUG_USART_IRQn, 0, 0);
+    usart_interrupt_enable(DEBUG_USART, USART_INT_RBNE);
+    
     printf("串口初始化完成，波特率: %lu\n", baudrate);
 }
 
@@ -245,9 +249,9 @@ static void process_command(const char* command) {
 // ============================================
 
 /**
- * @brief USART2中断处理
+ * @brief UART3中断处理
  */
-void USART2_IRQHandler(void) {
+void UART3_IRQHandler(void) {
     if (usart_interrupt_flag_get(DEBUG_USART, USART_INT_FLAG_RBNE) != RESET) {
         uint8_t ch = usart_data_receive(DEBUG_USART);
         process_received_char(ch);
