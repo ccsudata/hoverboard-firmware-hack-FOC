@@ -63,6 +63,7 @@ void Remote_Init(uint8_t mode) {
 
     if (mode == REMOTE_MODE_UART) {
         init_uart_input();
+        last_remote_update = GetSystemTicks();
         remote_mode = REMOTE_MODE_UART;
         printf("遥控器初始化完成：UART 串口输入模式\n");
         return;
@@ -96,8 +97,8 @@ void Remote_Update(void) {
     if (remote_mode == REMOTE_MODE_UART) {
         update_uart_input();
 
-        // UART 口输入超时检测
-        if (current_time - last_remote_update > REMOTE_TIMEOUT_MS) {
+        // UART 口输入超时检测：只有在已经成功连接后才判定断线
+        if (remote_connected == SET && (current_time - last_remote_update) > REMOTE_TIMEOUT_MS) {
             remote_connected = RESET;
             for (int i = 0; i < 8; i++) {
                 remote_channels[i] = 0;
@@ -308,6 +309,7 @@ static void process_uart_frame(void) {
 static void update_uart_input(void) {
     while (usart_flag_get(DEBUG_USART, USART_FLAG_RBNE) != RESET) {
         uint8_t ch = usart_data_receive(DEBUG_USART);
+        last_remote_update = GetSystemTicks();
 
         if (ch == '\r') {
             continue;
