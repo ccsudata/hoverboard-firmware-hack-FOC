@@ -113,8 +113,8 @@ static void system_init(void) {
     BLDC_Init();
     
     // 8. 串口初始化 (调试 / UART 遥控共用 UART3)
-    USART_Init(REMOTE_UART_BAUDRATE);
-    Remote_Init(REMOTE_MODE_UART);  // 使用UART串口遥控输入
+    //USART_Init(REMOTE_UART_BAUDRATE);
+    //Remote_Init(REMOTE_MODE_UART);  // 使用UART串口遥控输入
     
     // 9. 默认关闭电压检测
     BatteryVoltageCheck_Disable();
