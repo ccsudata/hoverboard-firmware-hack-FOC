@@ -34,20 +34,25 @@ static void process_command(const char* command);
  * @param baudrate 波特率
  */
 void USART_Init(uint32_t baudrate) {
-    // 使能USART和GPIO时钟
+    /* 1. 先把外设彻底复位（要 deinit 就放在最开头，别放在后面砸场子！） */
+    usart_deinit(DEBUG_USART);
+
+    /* 2. 开启 GPIO 和复用时钟 */
     rcu_periph_clock_enable(RCU_GPIOB);
-    /* enable AFIO for pin remap, then enable USART clock */
     rcu_periph_clock_enable(RCU_AF);
     rcu_periph_clock_enable(DEBUG_USART_CLK);
-    /* remap USART2 to PB10/PB11 when using full remap */
+
+    /* 3. 配置引脚重映射 */
     gpio_pin_remap_config(GPIO_USART2_FULL_REMAP, ENABLE);
-    
-    // 配置USART引脚 (PB10-TX, PB11-RX)
+
+    /* 4. 初始化 GPIO 管脚模式（让引脚处于完美的待命状态） */
     gpio_init(DEBUG_USART_TX_PORT, GPIO_MODE_AF_PP, GPIO_OSPEED_50MHZ, DEBUG_USART_TX_PIN);
     gpio_init(DEBUG_USART_RX_PORT, GPIO_MODE_IPU, GPIO_OSPEED_50MHZ, DEBUG_USART_RX_PIN);
-    
-    // 配置USART
-    usart_deinit(DEBUG_USART);
+
+    /* 5. 最后配置波特率并使能串口 */
+    usart_baudrate_set(DEBUG_USART, baudrate);
+    usart_receive_config(DEBUG_USART, USART_RECEIVE_ENABLE); // 确保有这行使能接收
+    usart_enable(DEBUG_USART);
     
     usart_baudrate_set(DEBUG_USART, baudrate);
     usart_word_length_set(DEBUG_USART, USART_WL_8BIT);
