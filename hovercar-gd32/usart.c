@@ -249,9 +249,9 @@ static void process_command(const char* command) {
 // ============================================
 
 /**
- * @brief UART3中断处理
+ * @brief USART2/UART3 中断处理
  */
-void UART3_IRQHandler(void) {
+void USART2_IRQHandler(void) {
     if (usart_interrupt_flag_get(DEBUG_USART, USART_INT_FLAG_RBNE) != RESET) {
         uint8_t ch = usart_data_receive(DEBUG_USART);
         process_received_char(ch);
