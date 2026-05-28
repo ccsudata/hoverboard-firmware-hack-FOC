@@ -1,6 +1,20 @@
+
 # hovercar-gd32 - 双电机BLDC控制器
 
 针对 GD32F103RCT6 MCU 的双电机BLDC控制器，适用于悬浮车、平衡车等双电机应用。
+
+## 编译环境准备
+
+- 需要安装 ARM 交叉编译工具链：`arm-none-eabi-gcc`
+- 对于 Ubuntu/Debian 系统可执行：
+  ```bash
+cd /workspaces/qgv;git clone --depth=1 https://github.com/cjacker/gd32f10x_firmware_library_gcc_makefile GD32
+
+sudo apt-get update
+sudo apt-get install -y gcc-arm-none-eabi binutils-arm-none-eabi
+  ```
+
+- 构建脚本使用 `./build.sh`，输出文件生成在 `build/` 目录。
 
 ## 功能特性
 
