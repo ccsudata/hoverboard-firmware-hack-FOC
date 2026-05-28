@@ -1,0 +1,67 @@
+
+There are no discarded input sections
+
+Memory Configuration
+
+Name             Origin             Length             Attributes
+FLASH            0x08000000         0x00008000         xr
+RAM              0x20000000         0x00002800         xrw
+*default*        0x00000000         0xffffffff
+
+Linker script and memory map
+
+LOAD /tmp/cc4EOL63.o
+START GROUP
+LOAD /usr/lib/gcc/arm-none-eabi/13.2.1/thumb/v7-m/nofp/libgcc.a
+LOAD /usr/lib/gcc/arm-none-eabi/13.2.1/../../../arm-none-eabi/lib/thumb/v7-m/nofp/libc.a
+END GROUP
+
+.vectors        0x08000000        0x8
+ *(.vectors)
+ .vectors       0x08000000        0x8 /tmp/cc4EOL63.o
+                0x08000000                tab
+
+.data           0x08000008        0x0
+ .data          0x08000008        0x0 /tmp/cc4EOL63.o
+
+.igot.plt       0x08000008        0x0
+ .igot.plt      0x08000008        0x0 /tmp/cc4EOL63.o
+
+.text           0x08000008       0x64
+ *(.text)
+ .text          0x08000008       0x64 /tmp/cc4EOL63.o
+                0x08000008                Default_Handler
+                0x0800000e                Reset_Handler
+                0x20002800                        _stack_ptr = (ORIGIN (RAM) + LENGTH (RAM))
+OUTPUT(build/main.elf elf32-littlearm)
+LOAD linker stubs
+
+.glue_7         0x0800006c        0x0
+ .glue_7        0x0800006c        0x0 linker stubs
+
+.glue_7t        0x0800006c        0x0
+ .glue_7t       0x0800006c        0x0 linker stubs
+
+.vfp11_veneer   0x0800006c        0x0
+ .vfp11_veneer  0x0800006c        0x0 linker stubs
+
+.v4_bx          0x0800006c        0x0
+ .v4_bx         0x0800006c        0x0 linker stubs
+
+.iplt           0x0800006c        0x0
+ .iplt          0x0800006c        0x0 /tmp/cc4EOL63.o
+
+.rel.dyn        0x0800006c        0x0
+ .rel.iplt      0x0800006c        0x0 /tmp/cc4EOL63.o
+
+.bss            0x0800006c        0x0
+ .bss           0x0800006c        0x0 /tmp/cc4EOL63.o
+
+.comment        0x00000000       0x26
+ .comment       0x00000000       0x26 /tmp/cc4EOL63.o
+                                 0x27 (size before relaxing)
+
+.ARM.attributes
+                0x00000000       0x2d
+ .ARM.attributes
+                0x00000000       0x2d /tmp/cc4EOL63.o

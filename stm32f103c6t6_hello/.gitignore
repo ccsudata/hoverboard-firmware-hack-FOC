@@ -1,0 +1,7 @@
+# 忽略整个 build 目录
+build/**/*
+
+# 例外：只保留 build/firmware.elf
+!build/
+!build/firmware.elf
+!build/firmware.hex
