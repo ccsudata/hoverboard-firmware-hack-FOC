@@ -36,7 +36,11 @@ static void process_command(const char* command);
 void USART_Init(uint32_t baudrate) {
     // 使能USART和GPIO时钟
     rcu_periph_clock_enable(RCU_GPIOB);
+    /* enable AFIO for pin remap, then enable USART clock */
+    rcu_periph_clock_enable(RCU_AF);
     rcu_periph_clock_enable(DEBUG_USART_CLK);
+    /* remap USART2 to PB10/PB11 when using full remap */
+    gpio_pin_remap_config(GPIO_USART2_FULL_REMAP, ENABLE);
     
     // 配置USART引脚 (PB10-TX, PB11-RX)
     gpio_init(DEBUG_USART_TX_PORT, GPIO_MODE_AF_PP, GPIO_OSPEED_50MHZ, DEBUG_USART_TX_PIN);
@@ -249,9 +253,9 @@ static void process_command(const char* command) {
 // ============================================
 
 /**
- * @brief UART3 中断处理
+ * @brief USART2 中断处理 (调试串口)
  */
-void UART3_IRQHandler(void) {
+void USART2_IRQHandler(void) {
     if (usart_interrupt_flag_get(DEBUG_USART, USART_INT_FLAG_RBNE) != RESET) {
         uint8_t ch = usart_data_receive(DEBUG_USART);
         process_received_char(ch);

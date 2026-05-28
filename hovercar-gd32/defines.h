@@ -87,14 +87,14 @@
 #define THROTTLE_ADC_PIN_1   GPIO_PIN_2   // PA2 - ADC1_CH2
 #define THROTTLE_ADC_PIN_2   GPIO_PIN_3   // PA3 - ADC1_CH3
 
-// 调试串口引脚
-#define DEBUG_USART          UART3
-#define DEBUG_USART_CLK      RCU_UART3
-#define DEBUG_USART_IRQn     UART3_IRQn
+// 调试串口引脚（与 GDB 脚本/板子对齐，使用 USART2，重映射到 PB10/PB11）
+#define DEBUG_USART          USART2
+#define DEBUG_USART_CLK      RCU_USART2
+#define DEBUG_USART_IRQn     USART2_IRQn
 #define DEBUG_USART_TX_PORT  GPIOB
-#define DEBUG_USART_TX_PIN   GPIO_PIN_10  // PB10 - UART3_TX
+#define DEBUG_USART_TX_PIN   GPIO_PIN_10  // PB10 - USART2_TX (full remap)
 #define DEBUG_USART_RX_PORT  GPIOB
-#define DEBUG_USART_RX_PIN   GPIO_PIN_11  // PB11 - UART3_RX
+#define DEBUG_USART_RX_PIN   GPIO_PIN_11  // PB11 - USART2_RX (full remap)
 
 // UART遥控器输入（右侧数字接口）
 #define REMOTE_UART_BAUDRATE 115200
