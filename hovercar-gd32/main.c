@@ -113,7 +113,7 @@ static void system_init(void) {
     BLDC_Init();
     
 // 8. UART debug initialization
-    USART_Init(DEBUG_UART_BAUDRATE);
+    //USART_Init(DEBUG_UART_BAUDRATE);
     
     // 9. 默认关闭电压检测
     BatteryVoltageCheck_Disable();
