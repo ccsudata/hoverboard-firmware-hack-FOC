@@ -299,6 +299,32 @@ static void cmd_gpio_write(const char* arg, const char* valstr) {
     USART_Printf("GPIO %s set to %d\r\n", arg, v ? 1 : 0);
 }
 
+static int calculate_pwm_timer_params(int hz, uint32_t* prescaler_out, uint32_t* period_out) {
+    if (hz <= 0 || prescaler_out == NULL || period_out == NULL) {
+        return 0;
+    }
+
+    uint32_t timer_clock = SYSTEM_CORE_CLOCK;
+    uint32_t total_ticks = timer_clock / (uint32_t)hz;
+    if (total_ticks == 0) {
+        return 0;
+    }
+
+    uint32_t prescaler = (total_ticks - 1U) / 0x10000U;
+    if (prescaler > 0xFFFFU) {
+        return 0;
+    }
+
+    uint32_t period = total_ticks / (prescaler + 1U);
+    if (period == 0 || period > 0xFFFFU) {
+        return 0;
+    }
+
+    *prescaler_out = prescaler;
+    *period_out = period;
+    return 1;
+}
+
 // 设置所有可用 PWM 定时器频率和占空比（默认 50%）
 static void cmd_pwm_all(const char* hzstr, const char* dutystr) {
     int hz = atoi(hzstr);
@@ -308,11 +334,16 @@ static void cmd_pwm_all(const char* hzstr, const char* dutystr) {
         return;
     }
 
-    uint32_t period = (SYSTEM_CORE_CLOCK / 2) / (uint32_t)hz;
-    if (period < 10) period = 10;
-    if (period > 0xFFFF) {
-        USART_Printf("Requested freq too low or period too large: period=%lu\r\n", period);
+    uint32_t prescaler;
+    uint32_t period;
+    if (!calculate_pwm_timer_params(hz, &prescaler, &period)) {
+        USART_Printf("Requested frequency out of range: %d Hz\r\n", hz);
         return;
+    }
+
+    uint32_t pulse = (((uint32_t)period + 1U) * (uint32_t)duty) / 100U;
+    if (pulse > period) {
+        pulse = period;
     }
 
     // Ensure timer and GPIO/AF clocks enabled and reset TIM1 as user script
@@ -321,7 +352,7 @@ static void cmd_pwm_all(const char* hzstr, const char* dutystr) {
     rcu_periph_clock_enable(RCU_TIMER1);
     rcu_periph_clock_enable(RCU_GPIOA);
     rcu_periph_clock_enable(RCU_AF);
-    // Clear AFIO MAPR PWM remap bits for TIM1 CH3 on PA3 if needed
+    // Ensure TIM1 uses default AF mapping for its channels
     volatile uint32_t* AFIO_MAPR = (uint32_t*)0x40010004;
     *AFIO_MAPR &= ~(3 << 8);
 
@@ -330,7 +361,7 @@ static void cmd_pwm_all(const char* hzstr, const char* dutystr) {
 
     // 通用定时器初始化结构
     timer_deinit(TIMER1);
-    timer_init_struct.prescaler = 0;
+    timer_init_struct.prescaler = (uint16_t)prescaler;
     timer_init_struct.alignedmode = TIMER_COUNTER_CENTER_BOTH;
     timer_init_struct.counterdirection = TIMER_COUNTER_UP;
     timer_init_struct.period = (uint16_t)period;
@@ -353,10 +384,9 @@ static void cmd_pwm_all(const char* hzstr, const char* dutystr) {
     timer_channel_output_mode_config(TIMER1, TIMER_CH_2, TIMER_OC_MODE_PWM1);
     timer_channel_output_mode_config(TIMER1, TIMER_CH_3, TIMER_OC_MODE_PWM1);
 
-    uint16_t pulse = (uint16_t)((((uint32_t)period + 1U) * (uint32_t)duty) / 100U);
-    timer_channel_output_pulse_value_config(TIMER1, TIMER_CH_1, pulse);
-    timer_channel_output_pulse_value_config(TIMER1, TIMER_CH_2, pulse);
-    timer_channel_output_pulse_value_config(TIMER1, TIMER_CH_3, pulse);
+    timer_channel_output_pulse_value_config(TIMER1, TIMER_CH_1, (uint16_t)pulse);
+    timer_channel_output_pulse_value_config(TIMER1, TIMER_CH_2, (uint16_t)pulse);
+    timer_channel_output_pulse_value_config(TIMER1, TIMER_CH_3, (uint16_t)pulse);
     timer_enable(TIMER1);
 
     // TIM3 CH3
@@ -365,7 +395,7 @@ static void cmd_pwm_all(const char* hzstr, const char* dutystr) {
     timer_init(TIMER3, &timer_init_struct);
     timer_channel_output_config(TIMER3, TIMER_CH_3, &oc_init_struct);
     timer_channel_output_mode_config(TIMER3, TIMER_CH_3, TIMER_OC_MODE_PWM1);
-    timer_channel_output_pulse_value_config(TIMER3, TIMER_CH_3, pulse);
+    timer_channel_output_pulse_value_config(TIMER3, TIMER_CH_3, (uint16_t)pulse);
     timer_enable(TIMER3);
 
     // TIM4 CH1, CH3
@@ -376,11 +406,11 @@ static void cmd_pwm_all(const char* hzstr, const char* dutystr) {
     timer_channel_output_config(TIMER4, TIMER_CH_3, &oc_init_struct);
     timer_channel_output_mode_config(TIMER4, TIMER_CH_1, TIMER_OC_MODE_PWM1);
     timer_channel_output_mode_config(TIMER4, TIMER_CH_3, TIMER_OC_MODE_PWM1);
-    timer_channel_output_pulse_value_config(TIMER4, TIMER_CH_1, pulse);
-    timer_channel_output_pulse_value_config(TIMER4, TIMER_CH_3, pulse);
+    timer_channel_output_pulse_value_config(TIMER4, TIMER_CH_1, (uint16_t)pulse);
+    timer_channel_output_pulse_value_config(TIMER4, TIMER_CH_3, (uint16_t)pulse);
     timer_enable(TIMER4);
 
-    USART_Printf("PWM set: %d Hz, duty %d%% (period=%lu, pulse=%u)\r\n", hz, duty, period, pulse);
+    USART_Printf("PWM set: %d Hz, duty %d%% (psc=%lu, period=%lu, pulse=%lu)\r\n", hz, duty, prescaler, period, pulse);
 }
 
 // 为单个引脚配置 PWM（目前实现 PA3 -> TIM1_CH3）
@@ -398,54 +428,62 @@ static void cmd_pwm_pin(const char* pinstr, int hz, int duty) {
         return;
     }
 
-    // Only implement PA3 -> TIM1_CH3 for now
+    // Only implement PA3 -> TIM2_CH4 for now
     if ((uint32_t)GPIOA != port || pin != GPIO_PIN_3) {
         USART_Printf("pwm pin: only PA3 currently supported for single-pin PWM\r\n");
         return;
     }
 
-    // Follow sequence: reset/clock enable, enable AF, clear AFIO MAPR bits, set PA3 AF_PP
-    rcu_periph_reset_enable(RCU_TIMER1RST);
-    rcu_periph_reset_disable(RCU_TIMER1RST);
-    rcu_periph_clock_enable(RCU_TIMER1);
+    uint32_t prescaler;
+    uint32_t period;
+    if (!calculate_pwm_timer_params(hz, &prescaler, &period)) {
+        USART_Printf("Requested frequency out of range: %d Hz\r\n", hz);
+        return;
+    }
+
+    uint32_t pulse = (((uint32_t)period + 1U) * (uint32_t)duty) / 100U;
+    if (pulse > period) {
+        pulse = period;
+    }
+
+    // Follow sequence: reset/clock enable, enable AF, clear TIM2 remap bits, set PA3 AF_PP
+    rcu_periph_reset_enable(RCU_TIMER2RST);
+    rcu_periph_reset_disable(RCU_TIMER2RST);
+    rcu_periph_clock_enable(RCU_TIMER2);
     rcu_periph_clock_enable(RCU_GPIOA);
     rcu_periph_clock_enable(RCU_AF);
     volatile uint32_t* AFIO_MAPR = (uint32_t*)0x40010004;
-    *AFIO_MAPR &= ~(3 << 8);
+    *AFIO_MAPR &= ~(3 << 10);
 
     // configure PA3 as AF push-pull
     gpio_init(GPIOA, GPIO_MODE_AF_PP, GPIO_OSPEED_50MHZ, GPIO_PIN_3);
 
-    // configure TIMER1 CH3
-    uint32_t period = (SYSTEM_CORE_CLOCK / 2) / (uint32_t)hz;
-    if (period < 10) period = 10;
+    // configure TIMER2 CH4
     timer_parameter_struct timer_init_struct;
     timer_oc_parameter_struct oc_init_struct;
-    timer_deinit(TIMER1);
-    timer_init_struct.prescaler = 0;
+    timer_deinit(TIMER2);
+    timer_init_struct.prescaler = (uint16_t)prescaler;
     timer_init_struct.alignedmode = TIMER_COUNTER_CENTER_BOTH;
     timer_init_struct.counterdirection = TIMER_COUNTER_UP;
     timer_init_struct.period = (uint16_t)period;
     timer_init_struct.clockdivision = TIMER_CKDIV_DIV1;
     timer_init_struct.repetitioncounter = 0;
-    timer_init(TIMER1, &timer_init_struct);
+    timer_init(TIMER2, &timer_init_struct);
 
     oc_init_struct.outputstate = TIMER_CCX_ENABLE;
-    oc_init_struct.outputnstate = TIMER_CCXN_ENABLE;
+    oc_init_struct.outputnstate = TIMER_CCXN_DISABLE;
     oc_init_struct.ocpolarity = TIMER_OC_POLARITY_HIGH;
     oc_init_struct.ocnpolarity = TIMER_OCN_POLARITY_LOW;
     oc_init_struct.ocidlestate = TIMER_OC_IDLE_STATE_LOW;
     oc_init_struct.ocnidlestate = TIMER_OCN_IDLE_STATE_HIGH;
 
-    timer_channel_output_config(TIMER1, TIMER_CH_3, &oc_init_struct);
-    timer_channel_output_mode_config(TIMER1, TIMER_CH_3, TIMER_OC_MODE_PWM1);
+    timer_channel_output_config(TIMER2, TIMER_CH_3, &oc_init_struct);
+    timer_channel_output_mode_config(TIMER2, TIMER_CH_3, TIMER_OC_MODE_PWM1);
+    timer_channel_output_pulse_value_config(TIMER2, TIMER_CH_3, (uint16_t)pulse);
 
-    uint16_t pulse = (uint16_t)((((uint32_t)period + 1U) * (uint32_t)duty) / 100U);
-    timer_channel_output_pulse_value_config(TIMER1, TIMER_CH_3, pulse);
+    timer_enable(TIMER2);
 
-    timer_enable(TIMER1);
-
-    USART_Printf("PWM pin %s set: %d Hz, duty %d%% (period=%lu, pulse=%u)\r\n", pinstr, hz, duty, period, pulse);
+    USART_Printf("PWM pin %s set: %d Hz, duty %d%% (psc=%lu, period=%lu, pulse=%lu)\r\n", pinstr, hz, duty, prescaler, period, pulse);
 }
 
 /**
