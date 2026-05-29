@@ -447,21 +447,22 @@ static void cmd_pwm_pin(const char* pinstr, int hz, int duty) {
     }
 
     // Follow sequence: reset/clock enable, enable AF, clear TIM2 remap bits, set PA3 AF_PP
-    rcu_periph_reset_enable(RCU_TIMER2RST);
-    rcu_periph_reset_disable(RCU_TIMER2RST);
-    rcu_periph_clock_enable(RCU_TIMER2);
+    rcu_periph_reset_enable(RCU_TIMER1RST);
+    rcu_periph_reset_disable(RCU_TIMER1RST);
+    rcu_periph_clock_enable(RCU_TIMER1);
     rcu_periph_clock_enable(RCU_GPIOA);
     rcu_periph_clock_enable(RCU_AF);
     volatile uint32_t* AFIO_MAPR = (uint32_t*)0x40010004;
-    *AFIO_MAPR &= ~(3 << 10);
+    /* clear TIMER1 remap bits (bits 9:8) so TIM1 channel maps to PA3 */
+    *AFIO_MAPR &= ~(3 << 8);
 
     // configure PA3 as AF push-pull
     gpio_init(GPIOA, GPIO_MODE_AF_PP, GPIO_OSPEED_50MHZ, GPIO_PIN_3);
 
-    // configure TIMER2 CH4
+    // configure TIMER1 CH3 (PA3)
     timer_parameter_struct timer_init_struct;
     timer_oc_parameter_struct oc_init_struct;
-    timer_deinit(TIMER2);
+    timer_deinit(TIMER1);
     timer_init_struct.prescaler = (uint16_t)prescaler;
     timer_init_struct.alignedmode = TIMER_COUNTER_CENTER_BOTH;
     timer_init_struct.counterdirection = TIMER_COUNTER_UP;
@@ -477,17 +478,17 @@ static void cmd_pwm_pin(const char* pinstr, int hz, int duty) {
     oc_init_struct.ocidlestate = TIMER_OC_IDLE_STATE_LOW;
     oc_init_struct.ocnidlestate = TIMER_OCN_IDLE_STATE_HIGH;
 
-    timer_channel_output_config(TIMER2, TIMER_CH_3, &oc_init_struct);
-    timer_channel_output_mode_config(TIMER2, TIMER_CH_3, TIMER_OC_MODE_PWM1);
-    timer_channel_output_pulse_value_config(TIMER2, TIMER_CH_3, (uint16_t)pulse);
+    timer_channel_output_config(TIMER1, TIMER_CH_3, &oc_init_struct);
+    timer_channel_output_mode_config(TIMER1, TIMER_CH_3, TIMER_OC_MODE_PWM1);
+    timer_channel_output_pulse_value_config(TIMER1, TIMER_CH_3, (uint16_t)pulse);
     /* enable channel output compare shadow (preload) so CCR updates take effect on update event */
-    timer_channel_output_shadow_config(TIMER2, TIMER_CH_3, TIMER_OC_SHADOW_ENABLE);
+    timer_channel_output_shadow_config(TIMER1, TIMER_CH_3, TIMER_OC_SHADOW_ENABLE);
     /* ensure channel output is enabled */
-    timer_channel_output_state_config(TIMER2, TIMER_CH_3, TIMER_CCX_ENABLE);
-    timer_auto_reload_shadow_enable(TIMER2);
-    timer_update_event_enable(TIMER2);
+    timer_channel_output_state_config(TIMER1, TIMER_CH_3, TIMER_CCX_ENABLE);
+    timer_auto_reload_shadow_enable(TIMER1);
+    timer_update_event_enable(TIMER1);
 
-    timer_enable(TIMER2);
+    timer_enable(TIMER1);
 
     USART_Printf("PWM pin %s set: %d Hz, duty %d%% (psc=%lu, period=%lu, pulse=%lu)\r\n", pinstr, hz, duty, prescaler, period, pulse);
 }
