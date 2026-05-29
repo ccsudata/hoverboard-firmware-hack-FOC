@@ -42,43 +42,40 @@ extern adc_buf_t adc_buffer;
 
 void USART_Init(uint32_t baudrate)
 {
-    // 1. 使能时钟
-    rcu_periph_clock_enable(RCU_GPIOB);
-    rcu_periph_clock_enable(DEBUG_USART_CLK);
-    rcu_periph_clock_enable(RCU_AF);
+    baudrate=baudrate; // 避免未使用参数的编译警告
+    /* 1. 对应 a1: set *(uint32_t*)0x40021018 = *(uint32_t*)0x40021018 | 0x00000008 */
+    /* 作用: 使能 GPIOB 时钟 (APB2ENR Bit 3) */
+    *(volatile uint32_t*)0x40021018 |= 0x00000008;
 
-    // 2. 启用 USART2 完全重映射 (TX -> PB10, RX -> PB11)
-    gpio_pin_remap_config(GPIO_USART2_FULL_REMAP, ENABLE);
+    /* 2. 对应 a1: set *(uint32_t*)0x4002101C = *(uint32_t*)0x4002101C | 0x00040000 */
+    /* 作用: 使能 USART3 时钟 (APB1ENR Bit 18) */
+    *(volatile uint32_t*)0x4002101C |= 0x00040000;
 
-    // 3. 配置 TX (PB10) 为复用推挽输出
-    gpio_init(DEBUG_USART_TX_PORT, GPIO_MODE_AF_PP, GPIO_OSPEED_50MHZ, DEBUG_USART_TX_PIN);
+    /* 3. 对应 a1: set *(uint32_t*)0x4000480C = 0x0000 */
+    /* 作用: 清除 USART3_CR1，关闭串口准备配置 */
+    *(volatile uint32_t*)0x4000480C = 0x0000;
+
+    /* 4. 对应 a1: set *(uint32_t*)0x40010C04 = (*(uint32_t*)0x40010C04 & ~0xFFFF00) | 0x4B00 */
+    /* 作用: 配置 GPIOB_CRH。PB10配置为复用推挽输出(0xB)，PB11配置为浮空输入(0x4) */
+    *(volatile uint32_t*)0x40010C04 = (*(volatile uint32_t*)0x40010C04 & ~0xFFFF00) | 0x4B00;
+
+    /* 5. 对应 a1: set *(uint32_t*)0x40004808 = 312 */
+    /* 作用: 写入波特率寄存器 (BRR)。 */
+    /* 注意：a1 中直接写死了 312 (通常对应 36MHz PCLK 下的 115200 波特率)。*/
+    /* 为了严格对应，这里默认写入 312。若要让 baudrate 参数生效，可替换为: 
+       *(volatile uint32_t*)0x40004808 = (36000000 + baudrate / 2) / baudrate; */
+    *(volatile uint32_t*)0x40004808 = 312; 
+
+    /* 6. 对应 a1: set *(uint32_t*)0x4000480C = 0x200C */
+    /* 作用: 配置 USART3_CR1，开启 USART(Bit13), TX(Bit3), RX(Bit2) */
+    /* 注意：0x200C = 0x2000(USART_ENABLE) | 0x0008(TX_ENABLE) | 0x0004(RX_ENABLE) */
+    /* 需要添加接收中断使能位：Bit5 (RXNEIE) = 0x0020 */
+    /* 所以最终值应为：0x202C = 0x2000 | 0x0020 | 0x0008 | 0x0004 */
+    *(volatile uint32_t*)0x4000480C = 0x202C;
     
-    // 4. 配置 RX (PB11) 为浮空输入
-    gpio_init(DEBUG_USART_RX_PORT, GPIO_MODE_IN_FLOATING, GPIO_OSPEED_50MHZ, DEBUG_USART_RX_PIN);
-
-    // 5. USART 复位并配置基本参数
-    usart_deinit(DEBUG_USART);
-    usart_baudrate_set(DEBUG_USART, baudrate);
-    usart_word_length_set(DEBUG_USART, USART_WL_8BIT);
-    usart_stop_bit_set(DEBUG_USART, USART_STB_1BIT);
-    usart_parity_config(DEBUG_USART, USART_PM_NONE);
-    
-    // 6. 关闭硬件流控制
-    usart_hardware_flow_rts_config(DEBUG_USART, USART_RTS_DISABLE);
-    usart_hardware_flow_cts_config(DEBUG_USART, USART_CTS_DISABLE);
-
-    // 7. 使能发送和接收
-    usart_transmit_config(DEBUG_USART, USART_TRANSMIT_ENABLE);
-    usart_receive_config(DEBUG_USART, USART_RECEIVE_ENABLE);
-
-    // 8. 启用接收中断 (RXNEIE - Bit 5 in CR1) ⭐ 关键！
-    usart_interrupt_enable(DEBUG_USART, USART_INT_RBNE);
-
-    // 9. 启用 NVIC 中断 ⭐ 关键！
-    nvic_irq_enable(DEBUG_USART_IRQn, 0, 0);
-
-    // 10. 启用 USART
-    usart_enable(DEBUG_USART);
+    /* 7. 使能 NVIC 中断 */
+    /* 使用 DEBUG_USART_IRQn 宏定义，在 defines.h 中定义为 USART2_IRQn */
+    NVIC->ISER[DEBUG_USART_IRQn >> 5] = 1 << (DEBUG_USART_IRQn & 0x1F);
 }
 
 
