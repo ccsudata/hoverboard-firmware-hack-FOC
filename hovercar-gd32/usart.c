@@ -228,7 +228,7 @@ static int16_t parse_pwm_value(const char* str) {
 }
 
 static uint8_t read_hall_pin(uint32_t port, uint16_t pin) {
-    return GPIO_INPUT_BIT_GET(port, pin) ? 0 : 1;
+    return (gpio_input_bit_get(port, pin) == SET) ? 1 : 0;
 }
 
 static void print_hall_pin_state(const char* label, uint16_t pin, uint8_t value) {

@@ -54,11 +54,11 @@
 #define RIGHT_MOTOR_WL_PORT  GPIOB
 
 // 霍尔传感器引脚
-#define LEFT_HALL_U_PIN      GPIO_PIN_5   // PB5
+#define LEFT_HALL_U_PIN      GPIO_PIN_5   // PB5 长黄
 #define LEFT_HALL_U_PORT     GPIOB
-#define LEFT_HALL_V_PIN      GPIO_PIN_6   // PB6
+#define LEFT_HALL_V_PIN      GPIO_PIN_6   // PB6 长绿
 #define LEFT_HALL_V_PORT     GPIOB
-#define LEFT_HALL_W_PIN      GPIO_PIN_7   // PB7
+#define LEFT_HALL_W_PIN      GPIO_PIN_7   // PB7 长蓝
 #define LEFT_HALL_W_PORT     GPIOB
 
 #define RIGHT_HALL_U_PIN     GPIO_PIN_10  // PC10
