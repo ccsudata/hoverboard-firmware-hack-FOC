@@ -227,6 +227,14 @@ static int16_t parse_pwm_value(const char* str) {
     return CLAMP(value, -1000, 1000);
 }
 
+static uint8_t read_hall_pin(uint32_t port, uint16_t pin) {
+    return GPIO_INPUT_BIT_GET(port, pin) ? 0 : 1;
+}
+
+static void print_hall_pin_state(const char* label, uint16_t pin, uint8_t value) {
+    USART_Printf("  %s pin: 0x%04X value: %u\r\n", label, (unsigned)pin, (unsigned)value);
+}
+
 /**
  * @brief 处理命令
  * @param command 命令字符串
@@ -351,9 +359,28 @@ static void process_command(const char* command) {
     }
     
     else if (strcmp(cmd_copy, "hall") == 0) {
-        USART_Printf("Left Hall State: 0x%02X (%d)\r\n", left_motor.hall_state, left_motor.hall_state);
-        USART_Printf("Right Hall State: 0x%02X (%d)\r\n", right_motor.hall_state, right_motor.hall_state);
+        uint8_t left_u = read_hall_pin(LEFT_HALL_U_PORT, LEFT_HALL_U_PIN);
+        uint8_t left_v = read_hall_pin(LEFT_HALL_V_PORT, LEFT_HALL_V_PIN);
+        uint8_t left_w = read_hall_pin(LEFT_HALL_W_PORT, LEFT_HALL_W_PIN);
+        uint8_t left_raw = (left_u << 0) | (left_v << 1) | (left_w << 2);
+
+        uint8_t right_u = read_hall_pin(RIGHT_HALL_U_PORT, RIGHT_HALL_U_PIN);
+        uint8_t right_v = read_hall_pin(RIGHT_HALL_V_PORT, RIGHT_HALL_V_PIN);
+        uint8_t right_w = read_hall_pin(RIGHT_HALL_W_PORT, RIGHT_HALL_W_PIN);
+        uint8_t right_raw = (right_u << 0) | (right_v << 1) | (right_w << 2);
+
+        USART_SendString("\r\n=== HALL SENSOR STATES ===\r\n");
+        USART_SendString("Left Hall pins:\r\n");
+        print_hall_pin_state("LEFT_HALL_U", LEFT_HALL_U_PIN, left_u);
+        print_hall_pin_state("LEFT_HALL_V", LEFT_HALL_V_PIN, left_v);
+        print_hall_pin_state("LEFT_HALL_W", LEFT_HALL_W_PIN, left_w);
+        USART_Printf("Left Raw State: 0x%02X (%d)\r\n", left_raw, left_raw);
         USART_Printf("Left Motor Position: %d\r\n", left_motor.position);
+        USART_SendString("\r\nRight Hall pins:\r\n");
+        print_hall_pin_state("RIGHT_HALL_U", RIGHT_HALL_U_PIN, right_u);
+        print_hall_pin_state("RIGHT_HALL_V", RIGHT_HALL_V_PIN, right_v);
+        print_hall_pin_state("RIGHT_HALL_W", RIGHT_HALL_W_PIN, right_w);
+        USART_Printf("Right Raw State: 0x%02X (%d)\r\n", right_raw, right_raw);
         USART_Printf("Right Motor Position: %d\r\n", right_motor.position);
     }
     
