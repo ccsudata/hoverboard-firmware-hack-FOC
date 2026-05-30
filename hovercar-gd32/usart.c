@@ -18,6 +18,7 @@
 // 串口接收缓冲区
 static uint8_t rx_buffer[256];
 static uint16_t rx_index = 0;
+static uint16_t rx_length = 0;
 static FlagStatus rx_ready = RESET;
 static uint32_t rx_timestamp = 0;  // 接收时间戳
 
@@ -130,11 +131,12 @@ uint16_t USART_ReadData(uint8_t* buffer, uint16_t max_length) {
         return 0;
     }
     
-    uint16_t length = (rx_index < max_length) ? rx_index : max_length;
+    uint16_t length = (rx_length < max_length) ? rx_length : max_length;
     memcpy(buffer, rx_buffer, length);
     
     // 清空缓冲区
     rx_index = 0;
+    rx_length = 0;
     rx_ready = RESET;
     
     return length;
@@ -145,9 +147,10 @@ void USART_ProcessPendingCommand(void) {
         return;
     }
 
-    rx_buffer[rx_index] = '\0';
+    rx_buffer[rx_length] = '\0';
     process_command((char*)rx_buffer);
     rx_index = 0;
+    rx_length = 0;
     rx_ready = RESET;
 }
 
@@ -205,6 +208,7 @@ static void process_received_char(uint8_t ch) {
     if (ch == '\r' || ch == '\n') {
         if (rx_index > 0) {
             rx_buffer[rx_index] = '\0';  // 添加字符串结束符
+            rx_length = rx_index;
             rx_ready = SET;
             
             // 获取当前时间戳 (毫秒，基于 SysTick)
