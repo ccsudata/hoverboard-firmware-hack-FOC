@@ -21,39 +21,12 @@ static uint16_t rx_index = 0;
 static FlagStatus rx_ready = RESET;
 static uint32_t rx_timestamp = 0;  // 接收时间戳
 
-#define USART_TX_BUFFER_SIZE 512
-static uint8_t tx_buffer[USART_TX_BUFFER_SIZE];
-static volatile uint16_t tx_head = 0;
-static volatile uint16_t tx_tail = 0;
-static volatile uint16_t tx_count = 0;
+// 串口发送缓冲区
+static uint8_t tx_buffer[256];
+static uint16_t tx_index = 0;
+static uint16_t tx_length = 0;
 
 static void process_command(const char* command);
-
-static void USART_QueueTransmit(const uint8_t* data, uint16_t length) {
-    if (data == NULL || length == 0) {
-        return;
-    }
-
-    __disable_irq();
-    uint16_t space = (uint16_t)(USART_TX_BUFFER_SIZE - tx_count);
-    if (space == 0) {
-        __enable_irq();
-        return;
-    }
-
-    uint16_t to_copy = (length < space) ? length : space;
-    for (uint16_t i = 0; i < to_copy; ++i) {
-        tx_buffer[tx_head] = data[i];
-        tx_head++;
-        if (tx_head >= USART_TX_BUFFER_SIZE) {
-            tx_head = 0;
-        }
-        tx_count++;
-    }
-
-    usart_interrupt_enable(DEBUG_USART, USART_INT_TBE);
-    __enable_irq();
-}
 
 // 外部声明（来自 main.c 和 bldc.c）
 extern VehicleControl vehicle;
@@ -75,11 +48,11 @@ void USART_Init(uint32_t baudrate)
     *(volatile uint32_t*)0x40021018 |= 0x00000008;
 
     /* 2. 对应 a1: set *(uint32_t*)0x4002101C = *(uint32_t*)0x4002101C | 0x00040000 */
-    /* 作用: 使能 USART2 时钟 (APB1ENR Bit 18)  GD32 的 USART2 = 0x40004800 而 STM32 同地址是 USART3，原因 hovercar-gd32/Read=uart.md */
+    /* 作用: 使能 USART3 时钟 (APB1ENR Bit 18) */
     *(volatile uint32_t*)0x4002101C |= 0x00040000;
 
     /* 3. 对应 a1: set *(uint32_t*)0x4000480C = 0x0000 */
-    /* 作用: 清除 USART2_CR1，关闭串口准备配置 */
+    /* 作用: 清除 USART3_CR1，关闭串口准备配置 */
     *(volatile uint32_t*)0x4000480C = 0x0000;
 
     /* 4. 对应 a1: set *(uint32_t*)0x40010C04 = (*(uint32_t*)0x40010C04 & ~0xFFFF00) | 0x4B00 */
@@ -94,7 +67,7 @@ void USART_Init(uint32_t baudrate)
     *(volatile uint32_t*)0x40004808 = 312; 
 
     /* 6. 对应 a1: set *(uint32_t*)0x4000480C = 0x200C */
-    /* 作用: 配置 USART2_CR1，开启 USART(Bit13), TX(Bit3), RX(Bit2) */
+    /* 作用: 配置 USART3_CR1，开启 USART(Bit13), TX(Bit3), RX(Bit2) */
     /* 注意：0x200C = 0x2000(USART_ENABLE) | 0x0008(TX_ENABLE) | 0x0004(RX_ENABLE) */
     /* 需要添加接收中断使能位：Bit5 (RXNEIE) = 0x0020 */
     /* 所以最终值应为：0x202C = 0x2000 | 0x0020 | 0x0008 | 0x0004 */
@@ -114,10 +87,11 @@ void USART_SendString(const char* str) {
     if (str == NULL) {
         return;
     }
-
-    size_t len = strlen(str);
-    if (len > 0) {
-        USART_QueueTransmit((const uint8_t*)str, (uint16_t)len);
+    
+    uint32_t len = strlen(str);
+    for (uint32_t i = 0; i < len; i++) {
+        usart_data_transmit(DEBUG_USART, (uint8_t)str[i]);
+        while (usart_flag_get(DEBUG_USART, USART_FLAG_TBE) == RESET);
     }
 }
 
@@ -130,8 +104,11 @@ void USART_SendData(const uint8_t* data, uint16_t length) {
     if (data == NULL || length == 0) {
         return;
     }
-
-    USART_QueueTransmit(data, length);
+    
+    for (uint16_t i = 0; i < length; i++) {
+        usart_data_transmit(DEBUG_USART, data[i]);
+        while (usart_flag_get(DEBUG_USART, USART_FLAG_TBE) == RESET);
+    }
 }
 
 /**
@@ -152,45 +129,15 @@ uint16_t USART_ReadData(uint8_t* buffer, uint16_t max_length) {
     if (buffer == NULL || max_length == 0 || rx_ready == RESET) {
         return 0;
     }
-
-    __disable_irq();
+    
     uint16_t length = (rx_index < max_length) ? rx_index : max_length;
     memcpy(buffer, rx_buffer, length);
-
+    
     // 清空缓冲区
     rx_index = 0;
     rx_ready = RESET;
-    __enable_irq();
-
+    
     return length;
-}
-
-void USART_ProcessPendingCommand(void) {
-    if (rx_ready == RESET) {
-        return;
-    }
-
-    char line[256];
-    uint16_t length;
-
-    __disable_irq();
-    length = rx_index;
-    if (length > sizeof(line) - 1) {
-        length = sizeof(line) - 1;
-    }
-    memcpy(line, rx_buffer, length);
-    line[length] = '\0';
-
-    rx_index = 0;
-    rx_ready = RESET;
-    __enable_irq();
-
-    if (length == 0) {
-        return;
-    }
-
-    USART_Printf("\r\n[%10u ms] RX: %s\r\n> ", GetSystemTicks(), line);
-    process_command(line);
 }
 
 /**
@@ -243,19 +190,34 @@ void USART_SendDebugInfo(DebugInfo* info) {
  * @param ch 接收到的字符
  */
 static void process_received_char(uint8_t ch) {
-    // 只在中断内接收并缓存数据，避免阻塞和被动丢包
+    // 简单的命令行处理
     if (ch == '\r' || ch == '\n') {
-        if (rx_index > 0 && rx_ready == RESET) {
+        if (rx_index > 0) {
             rx_buffer[rx_index] = '\0';  // 添加字符串结束符
             rx_ready = SET;
-            rx_timestamp = GetSystemTicks();
+            
+            // 获取当前时间戳 (毫秒，基于 SysTick)
+            // SysTick 配置为 1ms 中断，VAL 寄存器记录当前计数值
+            uint32_t ms_counter = (SystemCoreClock / 1000) - SysTick->VAL;
+            
+            // 立即发送时间戳 echo
+            USART_Printf("\r\n[%10u ms] RX: ", ms_counter);
+            USART_SendString((char*)rx_buffer);
+            USART_SendString("\r\n> ");
+            
+            // 处理命令
+            process_command((char*)rx_buffer);
         }
+        rx_index = 0;
     } else if (ch == 0x08 || ch == 0x7F) {  // 退格或删除
         if (rx_index > 0) {
             rx_index--;
+            USART_SendString("\b \b");  // 回显退格
         }
-    } else if (rx_index < sizeof(rx_buffer) - 1 && rx_ready == RESET) {
+    } else if (rx_index < sizeof(rx_buffer) - 1) {
         rx_buffer[rx_index++] = ch;
+        usart_data_transmit(DEBUG_USART, ch);  // 回显字符
+        while (usart_flag_get(DEBUG_USART, USART_FLAG_TBE) == RESET);
     }
 }
 
@@ -551,9 +513,6 @@ static void process_command(const char* command) {
         USART_SendString("  motor left <pwm>          - Set left motor PWM (-1000~1000)\r\n");
         USART_SendString("  motor right <pwm>         - Set right motor PWM (-1000~1000)\r\n");
         USART_SendString("  motor both <pwm>          - Set both motors PWM (-1000~1000)\r\n");
-        USART_SendString("  mo [pwm]                  - Open-loop left motor PWM, default left\r\n");
-        USART_SendString("  mo left <pwm>             - Open-loop left motor PWM\r\n");
-        USART_SendString("  mo right <pwm>            - Open-loop right motor PWM\r\n");
         USART_SendString("\r\nSystem Status:\r\n");
         USART_SendString("  status                    - Show system status\r\n");
         USART_SendString("  adc                       - Show ADC values\r\n");
@@ -694,48 +653,6 @@ static void process_command(const char* command) {
         USART_Printf("Right Motor Speed: %.0f RPM\r\n", GetRightMotorSpeed());
     }
     
-    else if (strncmp(cmd_copy, "mo", 2) == 0 && (cmd_copy[2] == ' ' || cmd_copy[2] == '\0')) {
-        const char* args = command + 2;
-        while (*args == ' ') args++;
-
-        char token[16] = {0};
-        int i = 0;
-        const char* p = args;
-        while (*p && *p != ' ' && i < (int)sizeof(token) - 1) {
-            token[i++] = *p++;
-        }
-        token[i] = '\0';
-
-        const char* motor = "left";
-        const char* pwmstr = NULL;
-        if (token[0] == '\0') {
-            USART_SendString("mo usage: mo [left|right] <pwm>\r\n");
-            return;
-        }
-
-        if ((token[0] == '+' || token[0] == '-' || (token[0] >= '0' && token[0] <= '9')) && token[0] != '\0') {
-            pwmstr = token;
-        } else {
-            if (strncasecmp(token, "left", 4) == 0 || token[0] == 'l' || token[0] == 'L') {
-                motor = "left";
-            } else if (strncasecmp(token, "right", 5) == 0 || token[0] == 'r' || token[0] == 'R') {
-                motor = "right";
-            } else {
-                USART_SendString("mo usage: mo [left|right] <pwm>\r\n");
-                return;
-            }
-            while (*p == ' ') p++;
-            if (*p == '\0') {
-                USART_SendString("mo usage: mo [left|right] <pwm>\r\n");
-                return;
-            }
-            pwmstr = p;
-        }
-
-        int16_t pwm = parse_pwm_value(pwmstr);
-        motor_pwm_openloop(motor, pwm);
-        USART_Printf("Open-loop motor %s pwm: %d\r\n", motor, pwm);
-    }
     else if (strncmp(cmd_copy, "pwm ", 4) == 0) {
         const char* args = command + 4;
         while (*args == ' ') args++;
@@ -892,29 +809,10 @@ static void process_command(const char* command) {
  * @brief USART2 中断处理 (调试串口)
  */
 void USART2_IRQHandler(void) {
-    // 先抢救正常数据，避免 ORERR 处理先读走可用字符。
     if (usart_interrupt_flag_get(DEBUG_USART, USART_INT_FLAG_RBNE) != RESET) {
         uint8_t ch = usart_data_receive(DEBUG_USART);
         process_received_char(ch);
         usart_interrupt_flag_clear(DEBUG_USART, USART_INT_FLAG_RBNE);
-    }
-
-    if (usart_flag_get(DEBUG_USART, USART_FLAG_ORERR) != RESET) {
-        usart_flag_clear(DEBUG_USART, USART_FLAG_ORERR);
-    }
-
-    if (usart_interrupt_flag_get(DEBUG_USART, USART_INT_FLAG_TBE) != RESET) {
-        if (tx_count > 0) {
-            usart_data_transmit(DEBUG_USART, tx_buffer[tx_tail]);
-            tx_tail++;
-            if (tx_tail >= USART_TX_BUFFER_SIZE) {
-                tx_tail = 0;
-            }
-            tx_count--;
-        }
-        if (tx_count == 0) {
-            usart_interrupt_disable(DEBUG_USART, USART_INT_TBE);
-        }
     }
     
     if (usart_interrupt_flag_get(DEBUG_USART, USART_INT_FLAG_TC) != RESET) {

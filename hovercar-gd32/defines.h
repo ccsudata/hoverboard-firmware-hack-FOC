@@ -73,7 +73,7 @@
 #define ENABLE_PORT          GPIOC
 #define BUZZER_PIN           GPIO_PIN_4   // PA4 - 蜂鸣器
 #define BUZZER_PORT          GPIOA
-#define LED_PIN              GPIO_PIN_2   // PB2 - 状态LED
+#define LED_PIN              GPIO_PIN_2   // PB2 - 状态LED 主板接口附近红灯 已经验证
 #define LED_PORT             GPIOB
 
 // ADC引脚
