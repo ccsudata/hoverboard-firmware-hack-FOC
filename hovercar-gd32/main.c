@@ -62,6 +62,7 @@ int main(void) {
     // 3. 等待使能
     printf("Waiting for enable signal...\n");
     while (vehicle.enable == RESET) {
+        USART_ProcessPendingCommand();
         handle_button_input();
         Delay(10);
         fwdgt_counter_reload();  // 喂狗
