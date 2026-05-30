@@ -735,18 +735,7 @@ static void process_command(const char* command) {
         USART_SendString("Left Hall Interpretation:\r\n");
         if (left_high_active == 0x00 || left_high_active == 0x07) {
             USART_SendString("  WARNING: Hardware fault (000/111) - Hall disconnected, shorted, or wiring error\r\n");
-        } else if (left_high_active == 0x01 || left_high_active == 0x03 || left_high_active == 0x02 || 
-                   left_high_active == 0x06 || left_high_active == 0x04 || left_high_active == 0x05) {
-            USART_SendString("  NORMAL: Motor stationary, valid Hall state\r\n");
-            // 单个霍尔输出解释
-            if (left_high_active == 0x01) USART_SendString("    Hall U=1: Position aligned with N pole\r\n");
-            if (left_high_active == 0x02) USART_SendString("    Hall V=1: Position aligned with N pole\r\n");
-            if (left_high_active == 0x04) USART_SendString("    Hall W=1: Position aligned with N pole\r\n");
-            if (left_u == 0) USART_SendString("    Hall U=0: Position aligned with S pole\r\n");
-            if (left_v == 0) USART_SendString("    Hall V=0: Position aligned with S pole\r\n");
-            if (left_w == 0) USART_SendString("    Hall W=0: Position aligned with S pole\r\n");
-        }
-        
+        } 
         USART_Printf("Left Motor Position: %d\r\n", left_motor.position);
         
         USART_SendString("\r\nRight Hall pins (低电平有效):\r\n");
@@ -763,17 +752,7 @@ static void process_command(const char* command) {
         USART_SendString("Right Hall Interpretation:\r\n");
         if (right_high_active == 0x00 || right_high_active == 0x07) {
             USART_SendString("  WARNING: Hardware fault (000/111) - Hall disconnected, shorted, or wiring error\r\n");
-        } else if (right_high_active == 0x01 || right_high_active == 0x03 || right_high_active == 0x02 || 
-                   right_high_active == 0x06 || right_high_active == 0x04 || right_high_active == 0x05) {
-            USART_SendString("  NORMAL: Motor stationary, valid Hall state\r\n");
-            // 单个霍尔输出解释
-            if (right_high_active == 0x01) USART_SendString("    Hall U=1: Position aligned with N pole\r\n");
-            if (right_high_active == 0x02) USART_SendString("    Hall V=1: Position aligned with N pole\r\n");
-            if (right_high_active == 0x04) USART_SendString("    Hall W=1: Position aligned with N pole\r\n");
-            if (right_u == 0) USART_SendString("    Hall U=0: Position aligned with S pole\r\n");
-            if (right_v == 0) USART_SendString("    Hall V=0: Position aligned with S pole\r\n");
-            if (right_w == 0) USART_SendString("    Hall W=0: Position aligned with S pole\r\n");
-        }
+        } 
         
         USART_Printf("Right Motor Position: %d\r\n", right_motor.position);
         
