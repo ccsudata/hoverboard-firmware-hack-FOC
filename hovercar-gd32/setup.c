@@ -325,6 +325,11 @@ static void init_left_motor_timer(void) {
     
     // 使能定时器
     timer_enable(TIMER1);
+
+    // 使能 TIM1 更新中断，用于 16kHz 开环后台任务和 ADC 触发
+    timer_interrupt_flag_clear(TIMER1, TIMER_INT_FLAG_UP);
+    timer_interrupt_enable(TIMER1, TIMER_INT_UP);
+    NVIC->ISER[TIMER1_IRQn >> 5] = 1 << (TIMER1_IRQn & 0x1F);
 }
 
 /**
@@ -476,10 +481,13 @@ void SysTick_Handler(void) {
 /**
  * @brief TIM1更新中断 (左电机PWM)
  */
-void TIMER1_UP_IRQHandler(void) {
+void TIMER1_IRQHandler(void) {
     if (timer_interrupt_flag_get(TIMER1, TIMER_INT_FLAG_UP) != RESET) {
         timer_interrupt_flag_clear(TIMER1, TIMER_INT_FLAG_UP);
         
+        // 16kHz 开环后台任务
+        BLDC_OpenLoop_Background_Task();
+
         // 触发ADC采样
         adc_software_trigger_enable(ADC0, ADC_REGULAR_CHANNEL);
     }

@@ -25,6 +25,8 @@ void BatteryVoltageCheck_Enable(void);
 void BatteryVoltageCheck_Disable(void);
 FlagStatus BatteryVoltageCheck_IsEnabled(void);
 void BLDC_Init(void);
+void motor_pwm_openloop(const char* motor, int16_t target_pwm);
+void BLDC_OpenLoop_Background_Task(void);
 void SetLeftMotorPWM(int16_t pwm);
 void SetRightMotorPWM(int16_t pwm);
 void SetMotorsEnable(FlagStatus enable);

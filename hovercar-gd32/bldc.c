@@ -25,6 +25,10 @@ float battery_voltage = BATTERY_CELLS * 3.6f;  // 初始电池电压
 float dc_current = 0.0f;                       // DC电流
 FlagStatus motors_enabled = RESET;             // 电机使能状态
 
+// 开环目标PWM值（-1000..1000）
+static int16_t target_pwm_left = 0;
+static int16_t target_pwm_right = 0;
+
 // 换相表 - 6步换相
 const uint8_t hall_to_position[8] = {
     0,  // 000 - 无效
@@ -57,6 +61,8 @@ uint8_t read_hall_sensors(uint32_t port_u, uint16_t pin_u,
 static void set_pwm_duty(uint32_t timer, uint8_t channel, int16_t duty);
 static void apply_motor_pwm(MotorState* motor, uint32_t timer, 
                            uint8_t ch_u, uint8_t ch_v, uint8_t ch_w);
+static void update_left_openloop_pwm(int16_t pwm_u, int16_t pwm_v, int16_t pwm_w);
+static void update_right_openloop_pwm(int16_t pwm_u, int16_t pwm_v, int16_t pwm_w);
 
 // ============================================
 // 公共函数
@@ -112,6 +118,90 @@ void SetMotorsEnable(FlagStatus enable) {
     }
     
     printf("Motor enable: %s\n", enable ? "ON" : "OFF");
+}
+
+/**
+ * @brief 极简开环控制 API (调用一次，持续运转)
+ * @param motor 字符串 'L','l','left' 或 'R','r','right'
+ * @param target_pwm 目标PWM，范围 -1000 到 1000
+ */
+void motor_pwm_openloop(const char* motor, int16_t target_pwm) {
+    if (motor == NULL) {
+        return;
+    }
+
+    target_pwm = CLAMP(target_pwm, MIN_PWM_VALUE, MAX_PWM_VALUE);
+
+    if (motor[0] == 'L' || motor[0] == 'l') {
+        target_pwm_left = target_pwm;
+    } else if (motor[0] == 'R' || motor[0] == 'r') {
+        target_pwm_right = target_pwm;
+    }
+}
+
+/**
+ * @brief 后台开环处理任务 (必须放入 16kHz 定时器中断中持续运行)
+ */
+void BLDC_OpenLoop_Background_Task(void) {
+    static float phase_left = 0.0f;
+    static float phase_right = 0.0f;
+
+    if (motors_enabled == SET) {
+        if (target_pwm_left != 0) {
+            phase_left += ((float)target_pwm_left * 0.0005f);
+            while (phase_left >= 6.0f) phase_left -= 6.0f;
+            while (phase_left < 0.0f) phase_left += 6.0f;
+
+            uint8_t idx = (uint8_t)phase_left;
+            float scale = (float)target_pwm_left / 1000.0f;
+            int16_t pwm_u = (int16_t)(pwm_pattern[idx][0] * scale);
+            int16_t pwm_v = (int16_t)(pwm_pattern[idx][1] * scale);
+            int16_t pwm_w = (int16_t)(pwm_pattern[idx][2] * scale);
+
+            update_left_openloop_pwm(pwm_u, pwm_v, pwm_w);
+            left_motor.pwm = target_pwm_left;
+        } else {
+            update_left_openloop_pwm(0, 0, 0);
+        }
+
+        if (target_pwm_right != 0) {
+            phase_right += ((float)target_pwm_right * 0.0005f);
+            while (phase_right >= 6.0f) phase_right -= 6.0f;
+            while (phase_right < 0.0f) phase_right += 6.0f;
+
+            uint8_t idx = (uint8_t)phase_right;
+            float scale = (float)target_pwm_right / 1000.0f;
+            int16_t pwm_u = (int16_t)(pwm_pattern[idx][0] * scale);
+            int16_t pwm_v = (int16_t)(pwm_pattern[idx][1] * scale);
+            int16_t pwm_w = (int16_t)(pwm_pattern[idx][2] * scale);
+
+            update_right_openloop_pwm(pwm_u, pwm_v, pwm_w);
+            right_motor.pwm = target_pwm_right;
+        } else {
+            update_right_openloop_pwm(0, 0, 0);
+        }
+    } else {
+        update_left_openloop_pwm(0, 0, 0);
+        update_right_openloop_pwm(0, 0, 0);
+    }
+}
+
+/**
+ * @brief 将左电机开环PWM写入 TIM1
+ */
+static void update_left_openloop_pwm(int16_t pwm_u, int16_t pwm_v, int16_t pwm_w) {
+    set_pwm_duty(TIMER1, TIMER_CH_1, pwm_u);
+    set_pwm_duty(TIMER1, TIMER_CH_2, pwm_v);
+    set_pwm_duty(TIMER1, TIMER_CH_3, pwm_w);
+}
+
+/**
+ * @brief 将右电机开环PWM写入 TIM3/TIM4
+ */
+static void update_right_openloop_pwm(int16_t pwm_u, int16_t pwm_v, int16_t pwm_w) {
+    set_pwm_duty(TIMER3, TIMER_CH_3, pwm_u);
+    set_pwm_duty(TIMER4, TIMER_CH_1, pwm_v);
+    set_pwm_duty(TIMER4, TIMER_CH_3, pwm_w);
 }
 
 /**
@@ -209,7 +299,7 @@ void BLDC_ControlLoop(void) {
         right_motor.pwm = 0;
         
         // 禁用PWM输出
-        TIMER_CARRIER_DISABLE(TIMER0);
+        TIMER_CARRIER_DISABLE(TIMER1);
         TIMER_CARRIER_DISABLE(TIMER3);
         TIMER_CARRIER_DISABLE(TIMER4);
         
@@ -298,8 +388,8 @@ static void set_pwm_duty(uint32_t timer, uint8_t channel, int16_t duty) {
         case TIMER_CH_3:
             TIMER_CH3CV(timer) = pwm_value;
             break;
-        case 4:
-            TIMER_CH3CV(timer) = pwm_value;
+        default:
+            // Unsupported timer channel for current implementation.
             break;
     }
 }

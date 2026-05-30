@@ -27,6 +27,7 @@ void USART_SendString(const char* str);
 void USART_SendData(const uint8_t* data, uint16_t length);
 FlagStatus USART_DataAvailable(void);
 uint16_t USART_ReadData(uint8_t* buffer, uint16_t max_length);
+void USART_ProcessPendingCommand(void);
 void USART_Printf(const char* format, ...);
 void USART_SendDebugInfo(DebugInfo* info);
 

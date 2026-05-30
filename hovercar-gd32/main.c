@@ -149,6 +149,9 @@ static void control_loop(void) {
     static uint32_t last_loop_time = 0;
     uint32_t current_time = GetSystemTicks();
 
+    // 先处理串口命令，避免在 USART 中断里执行耗时逻辑
+    USART_ProcessPendingCommand();
+
     // 非阻塞蜂鸣器更新，每个主循环都需要调用，避免 Delay 阻塞
     Buzzer_Update();
     
