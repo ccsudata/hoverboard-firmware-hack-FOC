@@ -747,71 +747,28 @@ static void process_command(const char* command) {
     }
     
     else if (strcmp(cmd_copy, "hall") == 0) {
-        // 使用 bldc.c 中的 read_hall_sensors 函数读取霍尔传感器
-        // 注意：read_hall_sensors 返回的是低电平有效的编码（0=高电平，1=低电平）
-        uint8_t left_hall_raw = read_hall_sensors(
-            LEFT_HALL_U_PORT, LEFT_HALL_U_PIN,
-            LEFT_HALL_V_PORT, LEFT_HALL_V_PIN,
-            LEFT_HALL_W_PORT, LEFT_HALL_W_PIN
-        );
+        // 读取原始状态
+        uint8_t left_hall_raw = read_hall_sensors(LEFT_HALL_U_PORT, LEFT_HALL_U_PIN, LEFT_HALL_V_PORT, LEFT_HALL_V_PIN, LEFT_HALL_W_PORT, LEFT_HALL_W_PIN);
+        uint8_t right_hall_raw = read_hall_sensors(RIGHT_HALL_U_PORT, RIGHT_HALL_U_PIN, RIGHT_HALL_V_PORT, RIGHT_HALL_V_PIN, RIGHT_HALL_W_PORT, RIGHT_HALL_W_PIN);
         
-        uint8_t right_hall_raw = read_hall_sensors(
-            RIGHT_HALL_U_PORT, RIGHT_HALL_U_PIN,
-            RIGHT_HALL_V_PORT, RIGHT_HALL_V_PIN,
-            RIGHT_HALL_W_PORT, RIGHT_HALL_W_PIN
-        );
+        // 转换为高电平有效
+        uint8_t left_h = (~left_hall_raw) & 0x07;
+        uint8_t right_h = (~right_hall_raw) & 0x07;
         
-        // 转换为高电平有效的表示（1=高电平，0=低电平）用于显示
-        uint8_t left_u = (left_hall_raw & 0x01) ? 0 : 1;
-        uint8_t left_v = (left_hall_raw & 0x02) ? 0 : 1;
-        uint8_t left_w = (left_hall_raw & 0x04) ? 0 : 1;
-        uint8_t left_high_active = (left_u << 0) | (left_v << 1) | (left_w << 2);
+        USART_SendString("\r\n=== HALL SENSOR STATUS SUMMARY ===\r\n");
+        // 格式：[L: 状态(二进制) | 原始值 | 位置] [R: 状态(二进制) | 原始值 | 位置]
+        USART_Printf("LEFT  Hall: 0b%d%d%d (Raw:0x%02X) | Pos: %d\r\n", 
+                     (left_h>>2)&1, (left_h>>1)&1, (left_h&1), left_hall_raw, left_motor.position);
+        USART_Printf("RIGHT Hall: 0b%d%d%d (Raw:0x%02X) | Pos: %d\r\n", 
+                     (right_h>>2)&1, (right_h>>1)&1, (right_h&1), right_hall_raw, right_motor.position);
         
-        uint8_t right_u = (right_hall_raw & 0x01) ? 0 : 1;
-        uint8_t right_v = (right_hall_raw & 0x02) ? 0 : 1;
-        uint8_t right_w = (right_hall_raw & 0x04) ? 0 : 1;
-        uint8_t right_high_active = (right_u << 0) | (right_v << 1) | (right_w << 2);
-        
-        USART_SendString("\r\n=== HALL SENSOR STATES ===\r\n");
-        USART_SendString("Left Hall pins (active low):\r\n");
-        USART_Printf("  LEFT_HALL_U (PB5): raw=0x%02X, high_active=%u\r\n", 
-                     (left_hall_raw & 0x01), left_u);
-        USART_Printf("  LEFT_HALL_V (PB6): raw=0x%02X, high_active=%u\r\n", 
-                     ((left_hall_raw >> 1) & 0x01), left_v);
-        USART_Printf("  LEFT_HALL_W (PB7): raw=0x%02X, high_active=%u\r\n", 
-                     ((left_hall_raw >> 2) & 0x01), left_w);
-        USART_Printf("Left Raw State (active low): 0x%02X (%d)\r\n", left_hall_raw, left_hall_raw);
-        USART_Printf("Left High Active State: 0x%02X (%d)\r\n", left_high_active, left_high_active);
-        
-        // Hall state interpretation
-        USART_SendString("Left Hall Interpretation:\r\n");
-        if (left_high_active == 0x00 || left_high_active == 0x07) {
-            USART_SendString("  WARNING: Hardware fault (000/111) - Hall disconnected, shorted, or wiring error\r\n");
-        } 
-        USART_Printf("Left Motor Position: %d\r\n", left_motor.position);
-        
-        USART_SendString("\r\nRight Hall pins (active low):\r\n");
-        USART_Printf("  RIGHT_HALL_U (PC10): raw=0x%02X, high_active=%u\r\n", 
-                     (right_hall_raw & 0x01), right_u);
-        USART_Printf("  RIGHT_HALL_V (PC11): raw=0x%02X, high_active=%u\r\n", 
-                     ((right_hall_raw >> 1) & 0x01), right_v);
-        USART_Printf("  RIGHT_HALL_W (PC12): raw=0x%02X, high_active=%u\r\n", 
-                     ((right_hall_raw >> 2) & 0x01), right_w);
-        USART_Printf("Right Raw State (active low): 0x%02X (%d)\r\n", right_hall_raw, right_hall_raw);
-        USART_Printf("Right High Active State: 0x%02X (%d)\r\n", right_high_active, right_high_active);
-        
-        // 霍尔状态解释
-        USART_SendString("Right Hall Interpretation:\r\n");
-        if (right_high_active == 0x00 || right_high_active == 0x07) {
-            USART_SendString("  WARNING: Hardware fault (000/111) - Hall disconnected, shorted, or wiring error\r\n");
-        } 
-        
-        USART_Printf("Right Motor Position: %d\r\n", right_motor.position);
-        
-        // 显示全局变量状态用于比较
-        USART_SendString("\r\n=== GLOBAL VARIABLE STATES (from bldc.c) ===\r\n");
-        USART_Printf("left_motor.hall_state: 0x%02X\r\n", left_motor.hall_state);
-        USART_Printf("right_motor.hall_state: 0x%02X\r\n", right_motor.hall_state);
+        // 仅在出现故障状态（000 或 111）时打印警告
+        if (left_h == 0x00 || left_h == 0x07) {
+            USART_SendString("!! WARNING: Left Hall Fault (000/111 detected)\r\n");
+        }
+        if (right_h == 0x00 || right_h == 0x07) {
+            USART_SendString("!! WARNING: Right Hall Fault (000/111 detected)\r\n");
+        }
     }
     
     else if (strncmp(cmd_copy, "beep", 4) == 0) {
