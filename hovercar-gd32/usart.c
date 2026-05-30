@@ -140,6 +140,17 @@ uint16_t USART_ReadData(uint8_t* buffer, uint16_t max_length) {
     return length;
 }
 
+void USART_ProcessPendingCommand(void) {
+    if (rx_ready == RESET) {
+        return;
+    }
+
+    rx_buffer[rx_index] = '\0';
+    process_command((char*)rx_buffer);
+    rx_index = 0;
+    rx_ready = RESET;
+}
+
 /**
  * @brief 格式化输出
  * @param format 格式字符串
@@ -204,9 +215,6 @@ static void process_received_char(uint8_t ch) {
             USART_Printf("\r\n[%10u ms] RX: ", ms_counter);
             USART_SendString((char*)rx_buffer);
             USART_SendString("\r\n> ");
-            
-            // 处理命令
-            process_command((char*)rx_buffer);
         }
         rx_index = 0;
     } else if (ch == 0x08 || ch == 0x7F) {  // 退格或删除
@@ -513,6 +521,9 @@ static void process_command(const char* command) {
         USART_SendString("  motor left <pwm>          - Set left motor PWM (-1000~1000)\r\n");
         USART_SendString("  motor right <pwm>         - Set right motor PWM (-1000~1000)\r\n");
         USART_SendString("  motor both <pwm>          - Set both motors PWM (-1000~1000)\r\n");
+        USART_SendString("  mo <pwm>                  - Open-loop left motor PWM (default left)\r\n");
+        USART_SendString("  mo left <pwm>             - Open-loop left motor PWM\r\n");
+        USART_SendString("  mo right <pwm>            - Open-loop right motor PWM\r\n");
         USART_SendString("\r\nSystem Status:\r\n");
         USART_SendString("  status                    - Show system status\r\n");
         USART_SendString("  adc                       - Show ADC values\r\n");
@@ -561,6 +572,43 @@ static void process_command(const char* command) {
         else {
             USART_SendString("Motor command: enable|disable|left|right|both\r\n");
         }
+    }
+    else if (strncmp(cmd_copy, "mo", 2) == 0 && (cmd_copy[2] == ' ' || cmd_copy[2] == '\0')) {
+        const char* args = command + 2;
+        while (*args == ' ') args++;
+
+        const char* motor = "left";
+        const char* pwmstr = NULL;
+
+        if (*args == '\0') {
+            USART_SendString("mo usage: mo [left|right] <pwm>\r\n");
+            return;
+        }
+
+        if ((args[0] == '+' || args[0] == '-' || (args[0] >= '0' && args[0] <= '9'))) {
+            pwmstr = args;
+        } else {
+            if (strncasecmp(args, "left", 4) == 0) {
+                motor = "left";
+                args += 4;
+            } else if (strncasecmp(args, "right", 5) == 0) {
+                motor = "right";
+                args += 5;
+            } else {
+                USART_SendString("mo usage: mo [left|right] <pwm>\r\n");
+                return;
+            }
+            while (*args == ' ') args++;
+            if (*args == '\0') {
+                USART_SendString("mo usage: mo [left|right] <pwm>\r\n");
+                return;
+            }
+            pwmstr = args;
+        }
+
+        int16_t pwm = parse_pwm_value(pwmstr);
+        motor_pwm_openloop(motor, pwm);
+        USART_Printf("Open-loop motor %s PWM: %d\r\n", motor, pwm);
     }
 
         else if (strncmp(cmd_copy, "gpio ", 5) == 0) {
@@ -721,31 +769,31 @@ static void process_command(const char* command) {
         uint8_t right_high_active = (right_u << 0) | (right_v << 1) | (right_w << 2);
         
         USART_SendString("\r\n=== HALL SENSOR STATES ===\r\n");
-        USART_SendString("Left Hall pins (低电平有效):\r\n");
+        USART_SendString("Left Hall pins (active low):\r\n");
         USART_Printf("  LEFT_HALL_U (PB5): raw=0x%02X, high_active=%u\r\n", 
                      (left_hall_raw & 0x01), left_u);
         USART_Printf("  LEFT_HALL_V (PB6): raw=0x%02X, high_active=%u\r\n", 
                      ((left_hall_raw >> 1) & 0x01), left_v);
         USART_Printf("  LEFT_HALL_W (PB7): raw=0x%02X, high_active=%u\r\n", 
                      ((left_hall_raw >> 2) & 0x01), left_w);
-        USART_Printf("Left Raw State (低电平有效): 0x%02X (%d)\r\n", left_hall_raw, left_hall_raw);
+        USART_Printf("Left Raw State (active low): 0x%02X (%d)\r\n", left_hall_raw, left_hall_raw);
         USART_Printf("Left High Active State: 0x%02X (%d)\r\n", left_high_active, left_high_active);
         
-        // 霍尔状态解释
+        // Hall state interpretation
         USART_SendString("Left Hall Interpretation:\r\n");
         if (left_high_active == 0x00 || left_high_active == 0x07) {
             USART_SendString("  WARNING: Hardware fault (000/111) - Hall disconnected, shorted, or wiring error\r\n");
         } 
         USART_Printf("Left Motor Position: %d\r\n", left_motor.position);
         
-        USART_SendString("\r\nRight Hall pins (低电平有效):\r\n");
+        USART_SendString("\r\nRight Hall pins (active low):\r\n");
         USART_Printf("  RIGHT_HALL_U (PC10): raw=0x%02X, high_active=%u\r\n", 
                      (right_hall_raw & 0x01), right_u);
         USART_Printf("  RIGHT_HALL_V (PC11): raw=0x%02X, high_active=%u\r\n", 
                      ((right_hall_raw >> 1) & 0x01), right_v);
         USART_Printf("  RIGHT_HALL_W (PC12): raw=0x%02X, high_active=%u\r\n", 
                      ((right_hall_raw >> 2) & 0x01), right_w);
-        USART_Printf("Right Raw State (低电平有效): 0x%02X (%d)\r\n", right_hall_raw, right_hall_raw);
+        USART_Printf("Right Raw State (active low): 0x%02X (%d)\r\n", right_hall_raw, right_hall_raw);
         USART_Printf("Right High Active State: 0x%02X (%d)\r\n", right_high_active, right_high_active);
         
         // 霍尔状态解释
