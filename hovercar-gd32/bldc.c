@@ -51,9 +51,9 @@ const int16_t pwm_pattern[6][3] = {
 // ============================================
 // 内部函数声明
 // ============================================
-static uint8_t read_hall_sensors(uint32_t port_u, uint16_t pin_u,
-                                 uint32_t port_v, uint16_t pin_v,
-                                 uint32_t port_w, uint16_t pin_w);
+uint8_t read_hall_sensors(uint32_t port_u, uint16_t pin_u,
+                          uint32_t port_v, uint16_t pin_v,
+                          uint32_t port_w, uint16_t pin_w);
 static void set_pwm_duty(uint32_t timer, uint8_t channel, int16_t duty);
 static void apply_motor_pwm(MotorState* motor, uint32_t timer, 
                            uint8_t ch_u, uint8_t ch_v, uint8_t ch_w);
