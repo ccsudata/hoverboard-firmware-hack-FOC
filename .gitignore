@@ -1,0 +1,11 @@
+.pio/
+.pioenvs/
+.vscode/
+MDK-ARM/DebugConfig/
+MDK-ARM/Listing/
+MDK-ARM/Objects/
+MDK-ARM/RTE/
+MDK-ARM/*.uvguix.*
+build/*.o
+build/*.d
+build/*.lst
