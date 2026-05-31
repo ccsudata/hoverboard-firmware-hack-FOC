@@ -104,6 +104,9 @@ void usart_process_command(SerialCommand *command_in, SerialCommand *command_out
 void usart_process_sideboard(SerialSideboard *Sideboard_in, SerialSideboard *Sideboard_out, uint8_t usart_idx);
 #endif
 
+// Feedback serial control
+extern uint8_t feedbackSerialEnabled;
+
 // Sideboard functions
 void sideboardLeds(uint8_t *leds);
 void sideboardSensors(uint8_t sensors);

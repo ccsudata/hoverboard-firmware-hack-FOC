@@ -103,6 +103,7 @@ int16_t  speedAvg;                      // average measured speed
 int16_t  speedAvgAbs;                   // average measured speed in absolute
 uint8_t  timeoutFlgADC    = 0;          // Timeout Flag for ADC Protection:    0 = OK, 1 = Problem detected (line disconnected or wrong ADC data)
 uint8_t  timeoutFlgSerial = 0;          // Timeout Flag for Rx Serial command: 0 = OK, 1 = Problem detected (line disconnected or wrong Rx data)
+uint8_t  feedbackSerialEnabled = 1;     // Allow feedback serial frames by default
 
 uint8_t  ctrlModReqRaw = CTRL_MOD_REQ;
 uint8_t  ctrlModReq    = CTRL_MOD_REQ;  // Final control mode request 
@@ -1295,8 +1296,25 @@ void usart_process_command(SerialCommand *command_in, SerialCommand *command_out
   if (command_in->start == SERIAL_START_FRAME) {
     checksum = (uint16_t)(command_in->start ^ command_in->steer ^ command_in->speed);
     if (command_in->checksum == checksum) {
-      *command_out = *command_in;
-      if (usart_idx == 2) {             // Sideboard USART2
+      if (command_in->steer == (int16_t)0x8000) {
+        // Special UART command: steer=INT16_MIN, speed=0 => disable feedback frames
+        //                     steer=INT16_MIN, speed=1  => enable feedback frames
+        if (command_in->speed == 0) {
+          feedbackSerialEnabled = 0;
+          #if defined(DEBUG_SERIAL_USART2) || defined(DEBUG_SERIAL_USART3)
+          printf("-- Feedback serial disabled --\r\n");
+          #endif
+        } else if (command_in->speed == 1) {
+          feedbackSerialEnabled = 1;
+          #if defined(DEBUG_SERIAL_USART2) || defined(DEBUG_SERIAL_USART3)
+          printf("-- Feedback serial enabled --\r\n");
+          #endif
+        }
+        command_out->start = SERIAL_START_FRAME;
+        command_out->steer = 0;
+        command_out->speed = 0;
+        command_out->checksum = (uint16_t)(SERIAL_START_FRAME ^ 0 ^ 0);
+        if (usart_idx == 2) {             // Sideboard USART2
         #ifdef CONTROL_SERIAL_USART2
         timeoutFlgSerial_L = 0;         // Clear timeout flag
         timeoutCntSerial_L = 0;         // Reset timeout counter
