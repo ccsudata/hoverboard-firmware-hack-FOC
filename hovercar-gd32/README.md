@@ -5,14 +5,12 @@
 
 ## 编译环境准备
 
-- 需要安装 ARM 交叉编译工具链：`arm-none-eabi-gcc`
-- 对于 Ubuntu/Debian 系统可执行：
-  ```bash
 cd /workspaces/qgv;git clone --depth=1 https://github.com/cjacker/gd32f10x_firmware_library_gcc_makefile GD32
-
+- 需要安装 ARM 交叉编译工具链：`arm-none-eabi-gcc`
 sudo apt-get update
 sudo apt-get install -y gcc-arm-none-eabi binutils-arm-none-eabi
-  ```
+cd /workspaces/qgv/hovercar-gd32;./build.sh
+
 
 - 构建脚本使用 `./build.sh`，输出文件生成在 `build/` 目录。
 
