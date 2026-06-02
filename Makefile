@@ -160,6 +160,9 @@ $(BUILD_DIR)/$(TARGET).elf: $(OBJECTS) Makefile
 
 $(BUILD_DIR)/%.hex: $(BUILD_DIR)/%.elf | $(BUILD_DIR)
 	$(HEX) $< $@
+	# Intel HEX output is produced with CRLF line endings by objcopy on some systems.
+	# Normalize to LF so Git does not report line-ending conversion warnings.
+	sed -i 's/\r$$//' $@
 
 $(BUILD_DIR)/%.bin: $(BUILD_DIR)/%.elf | $(BUILD_DIR)
 	$(BIN) $< $@
