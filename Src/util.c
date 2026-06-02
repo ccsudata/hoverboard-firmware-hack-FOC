@@ -105,7 +105,7 @@ uint8_t  timeoutFlgADC    = 0;          // Timeout Flag for ADC Protection:    0
 uint8_t  timeoutFlgSerial = 0;          // Timeout Flag for Rx Serial command: 0 = OK, 1 = Problem detected (line disconnected or wrong Rx data)
 // 默认：关闭二进制反馈帧，启用 UART echo 模式（上电后默认进入 echo 模式）
 uint8_t  feedbackSerialEnabled = 0;     // Allow feedback serial frames (disabled by default)
-uint8_t  uartEchoMode = 1;              // If set, transmit human-readable TX logs with timestamp
+uint8_t  uartEchoMode = 1;              // If set, echo received RX bytes with timestamp
 
 // Send a hex-dump of `buf` with millisecond timestamp over given UART (blocking)
 void uart_echo_with_timestamp(UART_HandleTypeDef *huart, uint8_t *buf, uint32_t len)
@@ -113,7 +113,7 @@ void uart_echo_with_timestamp(UART_HandleTypeDef *huart, uint8_t *buf, uint32_t 
   char line[256];
   int idx = 0;
   uint32_t t = HAL_GetTick();
-  idx = snprintf(line, sizeof(line), "[%lu] TX:", (unsigned long)t);
+  idx = snprintf(line, sizeof(line), "[%lu] RX:", (unsigned long)t);
   if (idx > 0) {
     HAL_UART_Transmit(huart, (uint8_t *)line, (uint16_t)idx, 100);
   }
@@ -1117,6 +1117,17 @@ void usart2_rx_check(void)
   static uint32_t old_pos;
   uint32_t pos;
   pos = rx_buffer_L_len - __HAL_DMA_GET_COUNTER(huart2.hdmarx);         // Calculate current position in buffer
+
+  if (uartEchoMode && pos != old_pos) {
+    if (pos > old_pos) {
+      uart_echo_with_timestamp(&huart2, &rx_buffer_L[old_pos], pos - old_pos);
+    } else {
+      uart_echo_with_timestamp(&huart2, &rx_buffer_L[old_pos], rx_buffer_L_len - old_pos);
+      if (pos > 0) {
+        uart_echo_with_timestamp(&huart2, &rx_buffer_L[0], pos);
+      }
+    }
+  }
   #endif
 
   #if defined(DEBUG_SERIAL_USART2)
@@ -1185,6 +1196,17 @@ void usart3_rx_check(void)
   static uint32_t old_pos;
   uint32_t pos;  
   pos = rx_buffer_R_len - __HAL_DMA_GET_COUNTER(huart3.hdmarx);         // Calculate current position in buffer
+
+  if (uartEchoMode && pos != old_pos) {
+    if (pos > old_pos) {
+      uart_echo_with_timestamp(&huart3, &rx_buffer_R[old_pos], pos - old_pos);
+    } else {
+      uart_echo_with_timestamp(&huart3, &rx_buffer_R[old_pos], rx_buffer_R_len - old_pos);
+      if (pos > 0) {
+        uart_echo_with_timestamp(&huart3, &rx_buffer_R[0], pos);
+      }
+    }
+  }
   #endif
 
   #if defined(DEBUG_SERIAL_USART3)
@@ -1193,7 +1215,7 @@ void usart3_rx_check(void)
       usart_process_debug(&rx_buffer_R[old_pos], pos - old_pos);        // Process data
     } else {                                                            // "Overflow" buffer mode
       usart_process_debug(&rx_buffer_R[old_pos], rx_buffer_R_len - old_pos);        // Process data
-      usart_process_debug(&rx_buffer_R[old_pos], pos);                           // Process data
+      usart_process_debug(&rx_buffer_R[0], pos);                           // Process data
     }
   }
   #endif // DEBUG_SERIAL_USART3
