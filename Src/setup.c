@@ -82,7 +82,7 @@ volatile adc_buf_t adc_buffer;
 
 #if defined(DEBUG_SERIAL_USART3) || defined(CONTROL_SERIAL_USART3) || defined(FEEDBACK_SERIAL_USART3) || defined(SIDEBOARD_SERIAL_USART3)
 /* USART3 init function */
-void UART3_Init(void){
+void UART3_Init_a(void){
     /* 1. 对应 a1: set *(uint32_t*)0x40021018 = *(uint32_t*)0x40021018 | 0x00000008 */
     /* 作用: 使能 GPIOB 时钟 (APB2ENR Bit 3) */
     *(volatile uint32_t*)0x40021018 |= 0x00000008;
@@ -116,6 +116,31 @@ void UART3_Init(void){
     /* 7. 使能 NVIC 中断 */
     
     NVIC->ISER[USART3_IRQn >> 5] = 1 << (USART3_IRQn & 0x1F);
+}
+
+
+
+void UART3_Init(void)
+{
+  asm volatile ("");
+
+  do { volatile uint32_t tmpreg; ((((RCC_TypeDef *)((0x40000000U + 0x00020000U) + 0x00001000U))->AHBENR) |= ((0x1U << (0U)))); tmpreg = ((((RCC_TypeDef *)((0x40000000U + 0x00020000U) + 0x00001000U))->AHBENR) & ((0x1U << (0U)))); ((void)(tmpreg)); } while(0U);
+
+  HAL_NVIC_SetPriority(DMA1_Channel2_IRQn, 1, 0);
+  HAL_NVIC_EnableIRQ(DMA1_Channel2_IRQn);
+
+  HAL_NVIC_SetPriority(DMA1_Channel3_IRQn, 1, 0);
+  HAL_NVIC_EnableIRQ(DMA1_Channel3_IRQn);
+
+  huart3.Instance = ((USART_TypeDef *)(0x40000000U + 0x00004800U));
+  huart3.Init.BaudRate = 115200;
+  huart3.Init.WordLength = 0x00000000U;
+  huart3.Init.StopBits = 0x00000000U;
+  huart3.Init.Parity = 0x00000000U;
+  huart3.Init.Mode = ((uint32_t)((0x1U << (3U)) |(0x1U << (2U))));
+  huart3.Init.HwFlowCtl = 0x00000000U;
+  huart3.Init.OverSampling = 0x00000000U;
+  HAL_UART_Init(&huart3);
 }
 
 
