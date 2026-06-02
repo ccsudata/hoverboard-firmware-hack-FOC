@@ -296,6 +296,7 @@
 #define __GCC_ATOMIC_TEST_AND_SET_TRUEVAL 1
 #define __FLT_NORM_MAX__ 3.4028234663852886e+38F
 #define __UINT_FAST64_TYPE__ long long unsigned int
+#define DUAL_INPUTS 1
 #define __INT_MAX__ 0x7fffffff
 #define __LACCUM_FBIT__ 31
 #define __USACCUM_MIN__ 0.0UHK
