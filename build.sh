@@ -6,7 +6,7 @@ set -euo pipefail
 # 编译变体选择（可通过环境变量或命令行参数设置）
 VARIANT="${1:-VARIANT_HOVERCAR}"
 # 在此处定义您的额外宏，例如开启双输入模式
-EXTRA_CFLAGS="-DDUAL_INPUTS"
+EXTRA_CFLAGS="-DDUAL_INPUTS -CONTROL_SERIAL_USART3"
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BUILD_DIR="$ROOT_DIR/build"
