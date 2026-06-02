@@ -103,7 +103,29 @@ int16_t  speedAvg;                      // average measured speed
 int16_t  speedAvgAbs;                   // average measured speed in absolute
 uint8_t  timeoutFlgADC    = 0;          // Timeout Flag for ADC Protection:    0 = OK, 1 = Problem detected (line disconnected or wrong ADC data)
 uint8_t  timeoutFlgSerial = 0;          // Timeout Flag for Rx Serial command: 0 = OK, 1 = Problem detected (line disconnected or wrong Rx data)
-uint8_t  feedbackSerialEnabled = 1;     // Allow feedback serial frames by default
+// 默认：关闭二进制反馈帧，启用 UART echo 模式（上电后默认进入 echo 模式）
+uint8_t  feedbackSerialEnabled = 0;     // Allow feedback serial frames (disabled by default)
+uint8_t  uartEchoMode = 1;              // If set, transmit human-readable TX logs with timestamp
+
+// Send a hex-dump of `buf` with millisecond timestamp over given UART (blocking)
+void uart_echo_with_timestamp(UART_HandleTypeDef *huart, uint8_t *buf, uint32_t len)
+{
+  char line[256];
+  int idx = 0;
+  uint32_t t = HAL_GetTick();
+  idx = snprintf(line, sizeof(line), "[%lu] TX:", (unsigned long)t);
+  if (idx > 0) {
+    HAL_UART_Transmit(huart, (uint8_t *)line, (uint16_t)idx, 100);
+  }
+
+  for (uint32_t i = 0; i < len; i++) {
+    int n = snprintf(line, sizeof(line), " %02X", buf[i]);
+    if (n > 0) HAL_UART_Transmit(huart, (uint8_t *)line, (uint16_t)n, 100);
+  }
+
+  const char nl[] = "\r\n";
+  HAL_UART_Transmit(huart, (uint8_t *)nl, sizeof(nl) - 1, 100);
+}
 
 uint8_t  ctrlModReqRaw = CTRL_MOD_REQ;
 uint8_t  ctrlModReq    = CTRL_MOD_REQ;  // Final control mode request 

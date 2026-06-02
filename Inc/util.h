@@ -106,6 +106,8 @@ void usart_process_sideboard(SerialSideboard *Sideboard_in, SerialSideboard *Sid
 
 // Feedback serial control
 extern uint8_t feedbackSerialEnabled;
+extern uint8_t uartEchoMode;
+void uart_echo_with_timestamp(UART_HandleTypeDef *huart, uint8_t *buf, uint32_t len);
 
 // Sideboard functions
 void sideboardLeds(uint8_t *leds);

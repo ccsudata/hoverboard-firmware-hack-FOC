@@ -50,6 +50,22 @@ if VARIANT="$VARIANT" make BUILD_DIR="$BUILD_DIR" all 2>&1; then
     echo "  - $BUILD_DIR/hover.hex"
     echo "  - $BUILD_DIR/hover.bin"
     echo ""
+    # 列出实际定义的预处理器宏（包含 Inc/config.h）并打印摘要
+    echo "生成预处理宏清单..."
+        CC_TOOL="arm-none-eabi-gcc"
+        MACRO_FILE="$BUILD_DIR/defined_macros.txt"
+        # Use same include paths and core defines as Makefile to get accurate macros
+        $CC_TOOL -dM -E \
+            -IInc \
+            -IDrivers/STM32F1xx_HAL_Driver/Inc \
+            -IDrivers/STM32F1xx_HAL_Driver/Inc/Legacy \
+            -IDrivers/CMSIS/Device/ST/STM32F1xx/Include \
+            -IDrivers/CMSIS/Include \
+            -DUSE_HAL_DRIVER -DSTM32F103xE -D$VARIANT -xc /dev/null > "$MACRO_FILE" 2>/dev/null || true
+    echo "已生成宏清单: $MACRO_FILE"
+    echo "---- 相关宏摘要 ----"
+    grep -E "VARIANT_|DEBUG_|FEEDBACK|CONTROL_|SIDEBOARD|PRI_INPUT|DEBUG_SERIAL|FEEDBACK_SERIAL|VARIANT_HOVERCAR|VARIANT_USART|USE_HAL_DRIVER|STM32F103xE" "$MACRO_FILE" || true
+    echo "--------------------"
 else
     echo ""
     echo "编译失败！"
