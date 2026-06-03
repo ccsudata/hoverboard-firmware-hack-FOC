@@ -32,8 +32,8 @@ extern uint8_t buzzerCount;             // global variable for the buzzer counts
 extern uint8_t buzzerFreq;              // global variable for the buzzer pitch. can be 1, 2, 3, 4, 5, 6, 7...
 extern uint8_t buzzerPattern;           // global variable for the buzzer pattern. can be 1, 2, 3, 4, 5, 6, 7...
 
-extern int pwml;
-extern int pwmr;
+extern volatile int pwml;
+extern volatile int pwmr;
 extern uint8_t enable;                  // global variable for motor enable
 
 extern uint8_t nunchuk_data[6];
@@ -157,6 +157,12 @@ void uart_echo_with_timestamp(UART_HandleTypeDef *huart, uint8_t *buf, uint32_t 
                   HAL_UART_Transmit(huart, (uint8_t *)resp, sizeof(resp) - 1, 100);
                 } else {
                   while (*endptr == ' ' || *endptr == '\t') endptr++;
+                  // Debug: report parsed target and value
+                  {
+                    char dbg[64];
+                    int dlen = snprintf(dbg, sizeof(dbg), "DBG parse: target=%s value=%ld\r\n", target, value);
+                    if (dlen > 0) HAL_UART_Transmit(huart, (uint8_t *)dbg, (uint16_t)(dlen > (int)sizeof(dbg)-1 ? sizeof(dbg)-1 : dlen), 100);
+                  }
                   if (*endptr != '\0') {
                     const char resp[] = "ERR: invalid value\r\n";
                     HAL_UART_Transmit(huart, (uint8_t *)resp, sizeof(resp) - 1, 100);
