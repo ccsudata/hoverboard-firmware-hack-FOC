@@ -1,22 +1,3 @@
-/**
-  * This file is part of the hoverboard-firmware-hack project.
-  *
-  * Copyright (C) 2020-2021 Emanuel FERU <aerdronix@gmail.com>
-  *
-  * This program is free software: you can redistribute it and/or modify
-  * it under the terms of the GNU General Public License as published by
-  * the Free Software Foundation, either version 3 of the License, or
-  * (at your option) any later version.
-  *
-  * This program is distributed in the hope that it will be useful,
-  * but WITHOUT ANY WARRANTY; without even the implied warranty of
-  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-  * GNU General Public License for more details.
-  *
-  * You should have received a copy of the GNU General Public License
-  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
-*/
-
 // Includes
 #include <stdio.h>
 #include <stdlib.h> // for abs()
@@ -51,6 +32,8 @@ extern uint8_t buzzerCount;             // global variable for the buzzer counts
 extern uint8_t buzzerFreq;              // global variable for the buzzer pitch. can be 1, 2, 3, 4, 5, 6, 7...
 extern uint8_t buzzerPattern;           // global variable for the buzzer pattern. can be 1, 2, 3, 4, 5, 6, 7...
 
+extern int pwml;
+extern int pwmr;
 extern uint8_t enable;                  // global variable for motor enable
 
 extern uint8_t nunchuk_data[6];
@@ -107,6 +90,9 @@ uint8_t  timeoutFlgSerial = 0;          // Timeout Flag for Rx Serial command: 0
 uint8_t  feedbackSerialEnabled = 0;     // Allow feedback serial frames (disabled by default)
 uint8_t  uartEchoMode = 1;              // If set, echo received RX bytes with timestamp
 
+static uint8_t  uart_echo_cmd_buffer[SERIAL_BUFFER_SIZE];
+static uint32_t uart_echo_cmd_len = 0;
+
 // Send a hex-dump of `buf` with millisecond timestamp over given UART (blocking)
 void uart_echo_with_timestamp(UART_HandleTypeDef *huart, uint8_t *buf, uint32_t len)
 {
@@ -121,6 +107,89 @@ void uart_echo_with_timestamp(UART_HandleTypeDef *huart, uint8_t *buf, uint32_t 
   for (uint32_t i = 0; i < len; i++) {
     int n = snprintf(line, sizeof(line), " %02X", buf[i]);
     if (n > 0) HAL_UART_Transmit(huart, (uint8_t *)line, (uint16_t)n, 100);
+
+    if (buf[i] == '\r' || buf[i] == '\n') {
+      if (uart_echo_cmd_len > 0) {
+        uart_echo_cmd_buffer[uart_echo_cmd_len] = '\0';
+        char *p = (char *)uart_echo_cmd_buffer;
+        while (*p == ' ' || *p == '\t') p++;
+        if (*p == '$') {
+          p++;
+          while (*p == ' ' || *p == '\t') p++;
+        }
+
+        if (strncmp(p, "motor", 5) == 0 && (p[5] == '\0' || p[5] == ' ' || p[5] == '\t')) {
+          p += 5;
+          while (*p == ' ' || *p == '\t') p++;
+          char *target = p;
+          while (*p && *p != ' ' && *p != '\t') {
+            if (*p >= 'A' && *p <= 'Z') {
+              *p += 'a' - 'A';
+            }
+            p++;
+          }
+          char separator = *p;
+          *p = '\0';
+
+          if (strcmp(target, "enable") == 0) {
+            enable = 1;
+            const char resp[] = "OK: motor enabled\r\n";
+            HAL_UART_Transmit(huart, (uint8_t *)resp, sizeof(resp) - 1, 100);
+          } else if (strcmp(target, "disable") == 0) {
+            enable = 0;
+            const char resp[] = "OK: motor disabled\r\n";
+            HAL_UART_Transmit(huart, (uint8_t *)resp, sizeof(resp) - 1, 100);
+          } else {
+            if (separator != '\0') {
+              *p = separator;
+              p++;
+              while (*p == ' ' || *p == '\t') p++;
+            }
+            if (strcmp(target, "left") == 0 || strcmp(target, "right") == 0 || strcmp(target, "both") == 0) {
+              if (*p == '\0') {
+                const char resp[] = "ERR: missing value\r\n";
+                HAL_UART_Transmit(huart, (uint8_t *)resp, sizeof(resp) - 1, 100);
+              } else {
+                char *endptr;
+                long value = strtol(p, &endptr, 10);
+                if (endptr == p || (value < -1000) || (value > 1000)) {
+                  const char resp[] = "ERR: value must be -1000..1000\r\n";
+                  HAL_UART_Transmit(huart, (uint8_t *)resp, sizeof(resp) - 1, 100);
+                } else {
+                  while (*endptr == ' ' || *endptr == '\t') endptr++;
+                  if (*endptr != '\0') {
+                    const char resp[] = "ERR: invalid value\r\n";
+                    HAL_UART_Transmit(huart, (uint8_t *)resp, sizeof(resp) - 1, 100);
+                  } else {
+                    if (strcmp(target, "left") == 0) {
+                      pwml = (int)value;
+                      const char resp[] = "OK: motor left set\r\n";
+                      HAL_UART_Transmit(huart, (uint8_t *)resp, sizeof(resp) - 1, 100);
+                    } else if (strcmp(target, "right") == 0) {
+                      pwmr = (int)value;
+                      const char resp[] = "OK: motor right set\r\n";
+                      HAL_UART_Transmit(huart, (uint8_t *)resp, sizeof(resp) - 1, 100);
+                    } else {
+                      pwml = pwmr = (int)value;
+                      const char resp[] = "OK: motor both set\r\n";
+                      HAL_UART_Transmit(huart, (uint8_t *)resp, sizeof(resp) - 1, 100);
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+
+        uart_echo_cmd_len = 0;
+      }
+    } else if (buf[i] >= 32 && buf[i] <= 126) {
+      if (uart_echo_cmd_len < sizeof(uart_echo_cmd_buffer) - 1) {
+        uart_echo_cmd_buffer[uart_echo_cmd_len++] = buf[i];
+      } else {
+        uart_echo_cmd_len = 0;
+      }
+    }
   }
 
   const char nl[] = "\r\n";
