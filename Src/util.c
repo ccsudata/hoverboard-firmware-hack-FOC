@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h> // for abs()
 #include <string.h>
+#include <ctype.h>
 #include "stm32f1xx_hal.h"
 #include "defines.h"
 #include "setup.h"
@@ -108,89 +109,87 @@ void uart_echo_with_timestamp(UART_HandleTypeDef *huart, uint8_t *buf, uint32_t 
     int n = snprintf(line, sizeof(line), " %02X", buf[i]);
     if (n > 0) HAL_UART_Transmit(huart, (uint8_t *)line, (uint16_t)n, 100);
 
+    // If we received CR or LF, treat it as end-of-line and parse accumulated ASCII
     if (buf[i] == '\r' || buf[i] == '\n') {
-        if (uart_echo_cmd_len > 0) {
+      if (uart_echo_cmd_len > 0) {
         uart_echo_cmd_buffer[uart_echo_cmd_len] = '\0';
+
         // Debug: echo the full received ASCII line for diagnosis
+        const char pre[] = "DBG line: ";
+        HAL_UART_Transmit(huart, (uint8_t *)pre, sizeof(pre)-1, 100);
+        HAL_UART_Transmit(huart, uart_echo_cmd_buffer, (uint16_t)uart_echo_cmd_len, 100);
+        const char eol[] = "\r\n";
+        HAL_UART_Transmit(huart, (uint8_t *)eol, sizeof(eol)-1, 100);
+
+        // Use sscanf-based parsing for robustness: expect "motor <target> [value]"
         {
-          const char pre[] = "DBG line: ";
-          HAL_UART_Transmit(huart, (uint8_t *)pre, sizeof(pre)-1, 100);
-          HAL_UART_Transmit(huart, uart_echo_cmd_buffer, (uint16_t)uart_echo_cmd_len, 100);
-          const char eol[] = "\r\n";
-          HAL_UART_Transmit(huart, (uint8_t *)eol, sizeof(eol)-1, 100);
-        }
-        char *p = (char *)uart_echo_cmd_buffer;
-        while (*p == ' ' || *p == '\t') p++;
-        if (*p == '$') {
-          p++;
-          while (*p == ' ' || *p == '\t') p++;
-        }
+          char cmd[16] = {0};
+          char target[16] = {0};
+          long val = 0;
+          int matched = sscanf((char *)uart_echo_cmd_buffer, "%15s %15s %ld", cmd, target, &val);
+          for (char *c = cmd; *c; ++c) *c = (char)tolower((unsigned char)*c);
+          for (char *c = target; *c; ++c) *c = (char)tolower((unsigned char)*c);
 
-        if (strncmp(p, "motor", 5) == 0 && (p[5] == '\0' || p[5] == ' ' || p[5] == '\t')) {
-          p += 5;
-          while (*p == ' ' || *p == '\t') p++;
-          char *target = p;
-          while (*p && *p != ' ' && *p != '\t') {
-            if (*p >= 'A' && *p <= 'Z') {
-              *p += 'a' - 'A';
-            }
-            p++;
-          }
-          char separator = *p;
-          *p = '\0';
+          // Debug: echo parsed tokens
+          char dbg2[96];
+          int l = snprintf(dbg2, sizeof(dbg2), "DBG sscanf: cmd='%s' target='%s' matched=%d val=%ld\r\n", cmd, target, matched, val);
+          if (l > 0) HAL_UART_Transmit(huart, (uint8_t *)dbg2, (uint16_t)(l > (int)sizeof(dbg2)-1 ? sizeof(dbg2)-1 : l), 100);
 
-          if (strcmp(target, "enable") == 0) {
-            enable = 1;
-            const char resp[] = "OK: motor enabled\r\n";
-            HAL_UART_Transmit(huart, (uint8_t *)resp, sizeof(resp) - 1, 100);
-          } else if (strcmp(target, "disable") == 0) {
-            enable = 0;
-            const char resp[] = "OK: motor disabled\r\n";
-            HAL_UART_Transmit(huart, (uint8_t *)resp, sizeof(resp) - 1, 100);
-          } else {
-            if (separator != '\0') {
-              *p = separator;
-              p++;
-              while (*p == ' ' || *p == '\t') p++;
-            }
-            if (strcmp(target, "left") == 0 || strcmp(target, "right") == 0 || strcmp(target, "both") == 0) {
-              if (*p == '\0') {
-                const char resp[] = "ERR: missing value\r\n";
-                HAL_UART_Transmit(huart, (uint8_t *)resp, sizeof(resp) - 1, 100);
+          if (matched >= 2 && strcmp(cmd, "motor") == 0) {
+            if (strcmp(target, "enable") == 0) {
+              enable = 1;
+              const char resp[] = "OK: motor enabled\r\n";
+              HAL_UART_Transmit(huart, (uint8_t *)resp, sizeof(resp) - 1, 100);
+            } else if (strcmp(target, "disable") == 0) {
+              enable = 0;
+              const char resp[] = "OK: motor disabled\r\n";
+              HAL_UART_Transmit(huart, (uint8_t *)resp, sizeof(resp) - 1, 100);
+            } else if ((strcmp(target, "left") == 0 || strcmp(target, "right") == 0 || strcmp(target, "both") == 0) && matched == 3) {
+              if (val < -1000 || val > 1000) {
+                const char resp[] = "ERR: value must be -1000..1000\r\n";
+                HAL_UART_Transmit(huart, (uint8_t *)resp, sizeof(resp)-1, 100);
               } else {
-                char *endptr;
-                long value = strtol(p, &endptr, 10);
-                if (endptr == p || (value < -1000) || (value > 1000)) {
-                  const char resp[] = "ERR: value must be -1000..1000\r\n";
-                  HAL_UART_Transmit(huart, (uint8_t *)resp, sizeof(resp) - 1, 100);
+                /* Map text motor command into the structured SerialCommand so the main loop
+                   treats it like a regular serial input source (no manual override needed). */
+                #if defined(CONTROL_SERIAL_USART2) || defined(CONTROL_SERIAL_USART3)
+                SerialCommand *sc = NULL;
+                uint8_t usart_idx = 0;
+                if (huart == &huart2) { sc = &commandL; usart_idx = 2; }
+                else if (huart == &huart3) { sc = &commandR; usart_idx = 3; }
+
+                if (sc) {
+                  sc->start = SERIAL_START_FRAME;
+                  if (strcmp(target, "left") == 0) { sc->steer = (int16_t)val; sc->speed = 0; }
+                  else if (strcmp(target, "right") == 0) { sc->steer = 0; sc->speed = (int16_t)val; }
+                  else { sc->steer = (int16_t)val; sc->speed = (int16_t)val; }
+
+                  sc->checksum = (uint16_t)(sc->start ^ sc->steer ^ sc->speed);
+
+                  #ifdef CONTROL_SERIAL_USART2
+                  if (usart_idx == 2) { timeoutFlgSerial_L = 0; timeoutCntSerial_L = 0; }
+                  #endif
+                  #ifdef CONTROL_SERIAL_USART3
+                  if (usart_idx == 3) { timeoutFlgSerial_R = 0; timeoutCntSerial_R = 0; }
+                  #endif
+
+                  const char resp[] = "OK: motor set\r\n";
+                  HAL_UART_Transmit(huart, (uint8_t *)resp, sizeof(resp)-1, 100);
                 } else {
-                  while (*endptr == ' ' || *endptr == '\t') endptr++;
-                  // Debug: report parsed target and value
-                  {
-                    char dbg[64];
-                    int dlen = snprintf(dbg, sizeof(dbg), "DBG parse: target=%s value=%ld\r\n", target, value);
-                    if (dlen > 0) HAL_UART_Transmit(huart, (uint8_t *)dbg, (uint16_t)(dlen > (int)sizeof(dbg)-1 ? sizeof(dbg)-1 : dlen), 100);
-                  }
-                  if (*endptr != '\0') {
-                    const char resp[] = "ERR: invalid value\r\n";
-                    HAL_UART_Transmit(huart, (uint8_t *)resp, sizeof(resp) - 1, 100);
-                  } else {
-                    if (strcmp(target, "left") == 0) {
-                      pwml = (int)value;
-                      const char resp[] = "OK: motor left set\r\n";
-                      HAL_UART_Transmit(huart, (uint8_t *)resp, sizeof(resp) - 1, 100);
-                    } else if (strcmp(target, "right") == 0) {
-                      pwmr = (int)value;
-                      const char resp[] = "OK: motor right set\r\n";
-                      HAL_UART_Transmit(huart, (uint8_t *)resp, sizeof(resp) - 1, 100);
-                    } else {
-                      pwml = pwmr = (int)value;
-                      const char resp[] = "OK: motor both set\r\n";
-                      HAL_UART_Transmit(huart, (uint8_t *)resp, sizeof(resp) - 1, 100);
-                    }
-                  }
+                  const char resp[] = "ERR: no serial input configured\r\n";
+                  HAL_UART_Transmit(huart, (uint8_t *)resp, sizeof(resp)-1, 100);
                 }
+                #else
+                // Fallback: directly set current input raw channels so main loop will process them
+                if (strcmp(target, "left") == 0) { input1[inIdx].raw = (int16_t)val; input2[inIdx].raw = 0; }
+                else if (strcmp(target, "right") == 0) { input1[inIdx].raw = 0; input2[inIdx].raw = (int16_t)val; }
+                else { input1[inIdx].raw = (int16_t)val; input2[inIdx].raw = (int16_t)val; }
+                const char resp[] = "OK: motor set\r\n";
+                HAL_UART_Transmit(huart, (uint8_t *)resp, sizeof(resp)-1, 100);
+                #endif
               }
+            } else {
+              const char resp[] = "ERR: invalid motor command\r\n";
+              HAL_UART_Transmit(huart, (uint8_t *)resp, sizeof(resp) - 1, 100);
             }
           }
         }
