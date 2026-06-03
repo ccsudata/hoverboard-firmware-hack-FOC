@@ -109,8 +109,16 @@ void uart_echo_with_timestamp(UART_HandleTypeDef *huart, uint8_t *buf, uint32_t 
     if (n > 0) HAL_UART_Transmit(huart, (uint8_t *)line, (uint16_t)n, 100);
 
     if (buf[i] == '\r' || buf[i] == '\n') {
-      if (uart_echo_cmd_len > 0) {
+        if (uart_echo_cmd_len > 0) {
         uart_echo_cmd_buffer[uart_echo_cmd_len] = '\0';
+        // Debug: echo the full received ASCII line for diagnosis
+        {
+          const char pre[] = "DBG line: ";
+          HAL_UART_Transmit(huart, (uint8_t *)pre, sizeof(pre)-1, 100);
+          HAL_UART_Transmit(huart, uart_echo_cmd_buffer, (uint16_t)uart_echo_cmd_len, 100);
+          const char eol[] = "\r\n";
+          HAL_UART_Transmit(huart, (uint8_t *)eol, sizeof(eol)-1, 100);
+        }
         char *p = (char *)uart_echo_cmd_buffer;
         while (*p == ' ' || *p == '\t') p++;
         if (*p == '$') {
